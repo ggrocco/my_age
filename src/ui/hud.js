@@ -1,6 +1,6 @@
 import { UNITS } from '../data/units.js';
 import { BUILDINGS } from '../data/buildings.js';
-import { AGES, AGE_COST, ageIndex } from '../data/ages.js';
+import { AGES, AGE_COST, ageIndex, ageLabel } from '../data/ages.js';
 import { canAfford, ageUpProblem } from '../sim/commands.js';
 import { WONDER_TICKS, RELIC_TICKS } from '../rounds/index.js';
 
@@ -23,7 +23,7 @@ export function createHud(ui) {
     if (round && round.id === 'relics') obj = `Relics held - you ${st.count ? st.count[0] : 0} | enemy ${st.count ? st.count[1] : 0} of 5 | hold ${fmtTime(st.hold[0])}/${fmtTime(RELIC_TICKS)}`;
     if (round && round.id === 'regicide') obj = `Protect your King (${g.entities.has(st.kings[0]) ? 'alive' : 'DEAD'}). Kill theirs.`;
     const resHtml = ['food', 'wood', 'gold', 'stone'].map(k => `<span class="res"><i class="dot" style="background:${COLORS[k]}"></i>${Math.floor(p.res[k])}</span>`).join('');
-    const ageName = p.age[0].toUpperCase() + p.age.slice(1);
+    const ageName = ageLabel(p.age);
     let html;
     if (ui.touch) html = resHtml + `<span class="res" title="Population">&#9823;${p.pop}/${p.popCap}</span><span class="res">${ageName}${p.ageUp ? '&hellip;' : ''}</span><span style="flex:1"></span><span class="res">${fmtTime(g.time)}</span><button data-menu="open" aria-label="Menu">&#9776;</button>`;
     else html = resHtml
@@ -62,12 +62,12 @@ export function createHud(ui) {
       cmdKey = key; const btns = [];
       if (vills.length) for (const [id, d] of Object.entries(BUILDINGS)) {
         const locked = ageIndex(d.age) > ageIndex(p.age), ok = !locked && canAfford(p, d.cost);
-        btns.push(`<button class="btn" data-build="${id}" ${ok ? '' : 'disabled'} title="${locked ? 'Requires ' + d.age + ' age' : ''}">${d.name}<small>${locked ? d.age + ' age' : costStr(d.cost)}</small></button>`);
+        btns.push(`<button class="btn" data-build="${id}" ${ok ? '' : 'disabled'} title="${locked ? 'Requires ' + ageLabel(d.age) + ' age' : ''}">${d.name}<small>${locked ? ageLabel(d.age) + ' age' : costStr(d.cost)}</small></button>`);
       }
       if (bld) {
         for (const u of BUILDINGS[bld.type].trains || []) { const d = UNITS[u], locked = ageIndex(d.age) > ageIndex(p.age), ok = !locked && canAfford(p, d.cost) && p.pop < p.popCap;
-          btns.push(`<button class="btn" data-train="${u}" data-b="${bld.id}" ${ok ? '' : 'disabled'} title="${locked ? 'Requires ' + d.age + ' age' : ''}">${d.name}<small>${locked ? d.age + ' age' : costStr(d.cost)}</small></button>`); }
-        if (bld.type === 'town_center') { const next = AGES[ageIndex(p.age) + 1]; if (next) { const why = ageUpProblem(ui.game, 0); btns.push(`<button class="btn age" data-age="1" ${why ? 'disabled' : ''} title="${why || ''}">Advance: ${next[0].toUpperCase() + next.slice(1)}<small>${costStr(AGE_COST[next].cost)}${why === 'needs buildings' ? ' + 2 bldgs' : ''}</small></button>`); } }
+          btns.push(`<button class="btn" data-train="${u}" data-b="${bld.id}" ${ok ? '' : 'disabled'} title="${locked ? 'Requires ' + ageLabel(d.age) + ' age' : ''}">${d.name}<small>${locked ? ageLabel(d.age) + ' age' : costStr(d.cost)}</small></button>`); }
+        if (bld.type === 'town_center') { const next = AGES[ageIndex(p.age) + 1]; if (next) { const why = ageUpProblem(ui.game, 0); btns.push(`<button class="btn age" data-age="1" ${why ? 'disabled' : ''} title="${why || ''}">Advance: ${ageLabel(next)}<small>${costStr(AGE_COST[next].cost)}${why === 'needs buildings' ? ' + 2 bldgs' : ''}</small></button>`); } }
       }
       cmds.innerHTML = btns.join('');
     }

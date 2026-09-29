@@ -8,3 +8,4 @@ export const AGE_COST = {
   future: { cost: { food: 1200, wood: 0, gold: 1200, stone: 0 }, time: 60 },
 };
 export const ageIndex = a => AGES.indexOf(a);
+export const ageLabel = a => AGE_NAME[a] || a;

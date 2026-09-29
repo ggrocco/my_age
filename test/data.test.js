@@ -1,7 +1,7 @@
 import test from 'node:test'; import assert from 'node:assert/strict';
 import { UNITS } from '../src/data/units.js';
 import { BUILDINGS } from '../src/data/buildings.js';
-import { AGES, AGE_COST, AGE_NAME } from '../src/data/ages.js';
+import { AGES, AGE_COST, AGE_NAME, ageLabel } from '../src/data/ages.js';
 const costOk = c => Object.values(c).every(v => v >= 0);
 test('units valid', () => {
   for (const [id, u] of Object.entries(UNITS)) {
@@ -33,3 +33,4 @@ test('future units: class, age and training building', () => {
   }
   assert.ok(UNITS.railgun.splash > 0 && UNITS.railgun.range > UNITS.catapult.range);
 });
+test('ageLabel returns display names', () => { assert.equal(ageLabel('future'), 'AI Future'); assert.equal(ageLabel('iron'), 'Iron'); });
