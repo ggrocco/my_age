@@ -20,7 +20,7 @@ export function createMinimap(canvas, game, view) {
     // fog shading
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     for (let y = 0; y < N; y += 1) for (let x = 0; x < N; x += 1) { const i = y * N + x; if (pl.visible[i]) continue; const p = toCanvas(x + 0.5, y + 0.5); ctx.fillStyle = pl.explored[i] ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.88)'; ctx.fillRect(p.x - sc, p.y - sc * 0.5, sc * 2, sc); }
-    const f = view.focus, a = view.zoom * (view.dom.clientWidth / view.dom.clientHeight), b = view.zoom;
+    const f = view.focus, [a, b] = view.halfExtents();
     const c = toCanvas(f.x, f.z), w = a * sc * 0.7, h = b * sc * 0.75;
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.strokeRect(c.x - w, c.y - h, w * 2, h * 2);
   }, toWorld };

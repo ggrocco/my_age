@@ -22,10 +22,21 @@ export function createHud(ui) {
     if (round && round.id === 'wonder') obj = `Wonder countdown - you ${fmtTime(st.hold[0])}/${fmtTime(WONDER_TICKS)} | enemy ${fmtTime(st.hold[1])}/${fmtTime(WONDER_TICKS)}`;
     if (round && round.id === 'relics') obj = `Relics held - you ${st.count ? st.count[0] : 0} | enemy ${st.count ? st.count[1] : 0} of 5 | hold ${fmtTime(st.hold[0])}/${fmtTime(RELIC_TICKS)}`;
     if (round && round.id === 'regicide') obj = `Protect your King (${g.entities.has(st.kings[0]) ? 'alive' : 'DEAD'}). Kill theirs.`;
-    const html = ['food', 'wood', 'gold', 'stone'].map(k => `<span class="res"><i class="dot" style="background:${COLORS[k]}"></i>${Math.floor(p.res[k])}</span>`).join('')
-      + `<span class="res" title="Population">Pop ${p.pop}/${p.popCap}</span><span class="res">${p.ageUp ? 'Advancing... ' : ''}${AGES[ageIndex(p.age)][0].toUpperCase() + p.age.slice(1)} Age</span>`
+    const resHtml = ['food', 'wood', 'gold', 'stone'].map(k => `<span class="res"><i class="dot" style="background:${COLORS[k]}"></i>${Math.floor(p.res[k])}</span>`).join('');
+    const ageName = p.age[0].toUpperCase() + p.age.slice(1);
+    let html;
+    if (ui.touch) html = resHtml + `<span class="res" title="Population">&#9823;${p.pop}/${p.popCap}</span><span class="res">${ageName}${p.ageUp ? '&hellip;' : ''}</span><span style="flex:1"></span><span class="res">${fmtTime(g.time)}</span><button data-menu="open" aria-label="Menu">&#9776;</button>`;
+    else html = resHtml
+      + `<span class="res" title="Population">Pop ${p.pop}/${p.popCap}</span><span class="res">${p.ageUp ? 'Advancing... ' : ''}${ageName} Age</span>`
       + `<span class="grow"><b>${round ? round.name : 'Match'}</b> - <span class="obj">${obj}</span></span><span class="res">${fmtTime(g.time)}</span>`
       + [1, 2, 4].map(s => `<button data-speed="${s}" class="${ui.speed === s ? 'on' : ''}">${s}x</button>`).join('') + `<button data-pause="1" class="${ui.paused ? 'on' : ''}">${ui.paused ? 'Resume' : 'Pause'}</button><button data-resign="1" class="${ui.resignArmed ? 'on' : ''}">${ui.resignArmed ? 'Confirm resign?' : 'Resign'}</button>`;
+    if (ui.touch) {
+      const objEl = $('objective'), otxt = round ? `${round.name}: ${obj}` : ''; if (objEl.textContent !== otxt) objEl.textContent = otxt;
+      let idleN = 0; for (const u of g.units.values()) if (u.owner === 0 && u.type === 'villager' && u.order.type === 'idle') idleN++;
+      const badge = document.querySelector('#touchbar [data-act=idle] .badge'), bt = idleN ? String(idleN) : ''; if (badge.textContent !== bt) badge.textContent = bt;
+      document.querySelector('#touchbar [data-act=box]').classList.toggle('on', !!ui.boxMode);
+      $('placebar').classList.toggle('hidden', !ui.placing); document.body.classList.toggle('placing', !!ui.placing);
+    }
     if (top._html !== html) { top.innerHTML = html; top._html = html; }
     // info panel
     const sel = [...ui.sel].map(id => g.entities.get(id)).filter(Boolean), one = sel.length === 1 ? sel[0] : null, insp = ui.inspect && g.entities.get(ui.inspect.id);
@@ -60,12 +71,23 @@ export function createHud(ui) {
       }
       cmds.innerHTML = btns.join('');
     }
+    document.body.classList.toggle('has-cmds', cmds.children.length > 0);
   };
+  hud.openMenu = () => {
+    const m = $('gamemenu'); if (m.classList.contains('hidden')) { ui._wasPaused = ui.paused; ui.paused = true; }
+    m.innerHTML = `<div class="card"><h2>Menu</h2><button class="btn" data-menu="close">Resume game</button><div class="row">${[1, 2, 4].map(s => `<button class="btn ${ui.speed === s ? 'on' : ''}" data-speed="${s}">${s}x</button>`).join('')}</div><button class="btn" data-resign="1">${ui.resignArmed ? 'Confirm resign?' : 'Resign'}</button><button class="btn" data-quit="1">${ui.quitArmed ? 'Confirm quit?' : 'Quit to menu'}</button></div>`;
+    m.classList.remove('hidden');
+  };
+  hud.closeMenu = () => { const m = $('gamemenu'); if (m.classList.contains('hidden')) return; m.classList.add('hidden'); ui.paused = !!ui._wasPaused; };
   document.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.menu === 'open') return hud.openMenu();
+    if (b.dataset.menu === 'close') return hud.closeMenu();
+    if (b.dataset.act) return ui.actions?.[b.dataset.act]?.();
+    if (b.dataset.quit) { if (ui.quitArmed) { ui.quitArmed = false; hud.closeMenu(); return ui.quit(); } ui.quitArmed = true; setTimeout(() => { ui.quitArmed = false; }, 3000); return hud.openMenu(); }
     if (b.dataset.speed) ui.setSpeed(+b.dataset.speed);
     else if (b.dataset.pause) ui.togglePause();
-    else if (b.dataset.resign) { if (ui.resignArmed) { ui.resignArmed = false; ui.game.command(0, { type: 'resign' }); } else { ui.resignArmed = true; setTimeout(() => { ui.resignArmed = false; }, 3000); } }
+    else if (b.dataset.resign) { if (ui.resignArmed) { ui.resignArmed = false; ui.game.command(0, { type: 'resign' }); hud.closeMenu(); } else { ui.resignArmed = true; setTimeout(() => { ui.resignArmed = false; }, 3000); if (!$('gamemenu').classList.contains('hidden')) hud.openMenu(); } }
     else if (b.dataset.build) ui.startPlacing(b.dataset.build);
     else if (b.dataset.train) { const n = e.shiftKey ? 5 : 1; for (let i = 0; i < n; i++) { const r = ui.cmd({ type: 'train', buildingId: +b.dataset.b, unit: b.dataset.train }); if (!r.ok) break; } cmdKey = ''; }
     else if (b.dataset.age) { ui.cmd({ type: 'age' }); cmdKey = ''; }

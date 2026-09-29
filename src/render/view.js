@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { BUILDINGS } from '../data/buildings.js';
 import { RES_KIND } from '../sim/util.js';
+import { buildModel, animate } from './models.js';
 
 export const OWNER_COLOR = [0x3b82f6, 0xef4444];
-const geo = { box: new THREE.BoxGeometry(1, 1, 1), cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 12), cone: new THREE.ConeGeometry(0.5, 1, 4), cone8: new THREE.ConeGeometry(0.5, 1, 8), sph: new THREE.SphereGeometry(0.5, 12, 8), rock: new THREE.DodecahedronGeometry(0.5), ring: new THREE.RingGeometry(0.55, 0.7, 24), plane: new THREE.PlaneGeometry(1, 1) };
+const geo = { box: new THREE.BoxGeometry(1, 1, 1), cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 12), cone: new THREE.ConeGeometry(0.5, 1, 4), cone8: new THREE.ConeGeometry(0.5, 1, 8), sph: new THREE.SphereGeometry(0.5, 12, 8), rock: new THREE.DodecahedronGeometry(0.5), ring: new THREE.RingGeometry(0.55, 0.7, 24), circle: new THREE.CircleGeometry(1, 20), plane: new THREE.PlaneGeometry(1, 1) };
 const matCache = new Map();
 const mat = (c, opts = {}) => { const k = c + JSON.stringify(opts); if (!matCache.has(k)) matCache.set(k, new THREE.MeshLambertMaterial({ color: c, ...opts })); return matCache.get(k); };
 function part(g, color, sx, sy, sz, x = 0, y = 0, z = 0, rx = 0) { const m = new THREE.Mesh(geo[g], mat(color)); m.scale.set(sx, sy, sz); m.position.set(x, y + sy / 2, z); m.rotation.x = rx; return m; }
@@ -21,9 +22,10 @@ export function createView(container, game) {
   const DIR = new THREE.Vector3(1, 1.05, 1).normalize();
   function placeCamera() {
     const w = renderer.domElement.clientWidth || 1, h = renderer.domElement.clientHeight || 1, a = w / h;
-    camera.left = -view.zoom * a; camera.right = view.zoom * a; camera.top = view.zoom; camera.bottom = -view.zoom; camera.updateProjectionMatrix();
-    camera.position.copy(view.focus).addScaledVector(DIR, 120); camera.lookAt(view.focus);
+    const hh = a < 1 ? view.zoom * 1.2 / a : view.zoom; camera.left = -hh * a; camera.right = hh * a; camera.top = hh; camera.bottom = -hh; camera.updateProjectionMatrix();
+    camera.position.copy(view.focus).addScaledVector(DIR, 120); camera.lookAt(view.focus); camera.updateMatrixWorld(true);
   }
+  view.refreshCamera = placeCamera; view.halfExtents = () => [camera.right, camera.top];
   view.resize = () => { renderer.setSize(container.clientWidth, container.clientHeight, false); placeCamera(); };
   view.pan = (dx, dz) => { view.focus.x = Math.max(0, Math.min(N, view.focus.x + dx)); view.focus.z = Math.max(0, Math.min(N, view.focus.z + dz)); };
   view.setZoom = z => { view.zoom = Math.max(6, Math.min(34, z)); };
@@ -55,43 +57,19 @@ export function createView(container, game) {
   view.fogEnabled = true;
 
   // entity meshes
+  const _wq = new THREE.Quaternion();
+  const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.24, depthWrite: false });
   function makeMesh(e) {
-    const g = new THREE.Group(), col = e.kind === 'unit' || e.kind === 'building' ? OWNER_COLOR[e.owner] : 0xffffff; g.userData = { id: e.id, kind: e.kind, owner: e.owner };
-    if (e.kind === 'unit') {
-      const s = e.cls === 'siege' ? 1.4 : e.cls === 'cav' ? 1.25 : e.type === 'king' ? 1.25 : 1;
-      if (e.cls === 'siege') { g.add(part('box', 0x6b4a2b, 1.0, 0.35, 0.7, 0, 0.2)); g.add(part('box', 0x8a6238, 0.15, 0.9, 0.15, 0.2, 0.3, 0, -0.5)); g.add(part('cyl', 0x333333, 0.3, 0.12, 0.3, 0.35, 0.05, 0.4, Math.PI / 2)); g.add(part('cyl', 0x333333, 0.3, 0.12, 0.3, -0.35, 0.05, 0.4, Math.PI / 2)); g.add(part('sph', col, 0.3, 0.3, 0.3, 0, 0.55)); }
-      else if (e.cls === 'cav') { g.add(part('box', 0x7a5230, 0.4, 0.4, 0.9, 0, 0.3)); g.add(part('box', 0x7a5230, 0.2, 0.4, 0.2, 0, 0.55, 0.4)); g.add(part('cyl', col, 0.28, 0.5, 0.28, 0, 0.55)); g.add(part('sph', 0xe8c9a0, 0.26, 0.26, 0.26, 0, 1.0)); }
-      else {
-        g.add(part('cyl', col, 0.34 * s, 0.55 * s, 0.34 * s)); g.add(part('sph', 0xe8c9a0, 0.26 * s, 0.26 * s, 0.26 * s, 0, 0.55 * s));
-        if (e.type === 'king') { g.add(part('cyl', 0xfacc15, 0.3, 0.14, 0.3, 0, 0.98)); g.add(part('cyl', col, 0.42, 0.3, 0.42, 0, 0.3)); }
-        if (e.cls === 'inf') { g.add(part('box', 0x9ca3af, 0.06, 0.7, 0.06, 0.28, 0.1)); g.add(part('cyl', 0x92400e, 0.32, 0.05, 0.32, -0.28, 0.25, 0, Math.PI / 2)); }
-        if (e.cls === 'archer') g.add(part('box', 0x78350f, 0.05, 0.6, 0.05, 0.3, 0.1));
-        if (e.type === 'villager') g.add(part('box', 0xd6b370, 0.34, 0.08, 0.34, 0, 0.62));
-      }
-    } else if (e.kind === 'building') {
-      const sz = e.size - 0.25, t = e.type;
-      if (t === 'farm') { g.add(part('box', 0x8b6b3a, sz, 0.06, sz)); for (let i = -2; i <= 2; i++) g.add(part('box', 0x65a30d, sz * 0.9, 0.09, 0.12, 0, 0, i * 0.3)); }
-      else if (t === 'house') { g.add(part('box', 0xd6c7a1, sz, 0.7, sz)); g.add(part('cone', col, sz * 1.5, 0.6, sz * 1.5, 0, 0.7)); g.children[1].rotation.y = Math.PI / 4; }
-      else if (t === 'town_center') { g.add(part('box', 0xc9b98f, sz, 1.2, sz)); g.add(part('cone', col, sz * 1.5, 0.9, sz * 1.5, 0, 1.2)); g.children[1].rotation.y = Math.PI / 4; g.add(part('cyl', 0xb8a87d, 0.7, 2.0, 0.7, 0, 0, 0)); g.add(part('cone8', col, 0.9, 0.6, 0.9, 0, 2.0)); }
-      else if (t === 'granary') { g.add(part('cyl', 0xd9b86c, sz, 0.9, sz)); g.add(part('cone8', col, sz * 1.15, 0.5, sz * 1.15, 0, 0.9)); }
-      else if (t === 'storage_pit') { g.add(part('box', 0x8b6b3a, sz, 0.35, sz)); g.add(part('box', 0x5b4326, sz * 0.7, 0.4, sz * 0.7)); g.add(part('box', col, 0.15, 0.7, 0.15, sz / 2 - 0.1, 0, sz / 2 - 0.1)); }
-      else if (t === 'wonder') { for (let i = 0; i < 4; i++) g.add(part('box', i % 2 ? 0xe5d6a8 : 0xd6c58f, sz * (1 - i * 0.2), 0.9, sz * (1 - i * 0.2), 0, i * 0.9)); g.add(part('cone', 0xfacc15, 1.0, 1.4, 1.0, 0, 3.6)); g.add(part('box', col, 0.2, 1.2, 0.2, 0, 3.6)); }
-      else if (t === 'government_center') { g.add(part('box', 0xd2c4a0, sz, 1.1, sz)); g.add(part('box', col, sz * 1.05, 0.2, sz * 1.05, 0, 1.1)); for (const dx of [-1, 1]) g.add(part('cyl', 0xf2ead2, 0.25, 1.1, 0.25, dx * sz / 2.2, 0, sz / 2)); g.add(part('cone', col, sz * 0.9, 0.7, sz * 0.9, 0, 1.3)); g.children.at(-1).rotation.y = Math.PI / 4; }
-      else { g.add(part('box', 0xb59a6b, sz, t === 'market' ? 0.7 : 1.0, sz)); g.add(part('box', col, sz * 1.08, 0.18, sz * 1.08, 0, t === 'market' ? 0.7 : 1.0)); g.add(part('box', col, 0.12, 0.9, 0.12, sz / 2 - 0.1, 1.1, sz / 2 - 0.1)); }
-      g.userData.rest = g.children.slice();
-    } else if (e.kind === 'resource') {
-      if (e.type === 'tree') { g.add(part('cyl', 0x6b4423, 0.16, 0.5, 0.16)); g.add(part('cone8', 0x2f6b2f, 0.7, 1.1, 0.7, 0, 0.4)); g.add(part('cone8', 0x3a7d3a, 0.5, 0.8, 0.5, 0, 0.95)); }
-      else if (e.type === 'berry') { g.add(part('sph', 0x3f7f3a, 0.6, 0.4, 0.6, 0, 0)); for (let i = 0; i < 5; i++) g.add(part('sph', 0xc026d3, 0.12, 0.12, 0.12, Math.cos(i * 1.3) * 0.22, 0.28, Math.sin(i * 1.3) * 0.22)); }
-      else if (e.type === 'gold') { g.add(part('rock', 0xfacc15, 0.8, 0.6, 0.7, 0, 0)); g.add(part('rock', 0xeab308, 0.4, 0.4, 0.4, 0.25, 0, 0.2)); }
-      else { g.add(part('rock', 0x9ca3af, 0.85, 0.6, 0.75, 0, 0)); g.add(part('rock', 0x6b7280, 0.4, 0.4, 0.4, -0.25, 0, 0.2)); }
-    } else if (e.kind === 'relic') { g.add(part('box', 0xfde047, 0.3, 0.4, 0.3, 0, 0.25)); g.add(part('sph', 0xfff7ae, 0.25, 0.25, 0.25, 0, 0.65)); }
+    const g = new THREE.Group(); g.userData = { id: e.id, kind: e.kind, owner: e.owner, hp: e.hp };
+    const m = buildModel(e); g.add(m.root); g.userData.anim = m.anim;
+    const sh = new THREE.Mesh(geo.circle, shadowMat); sh.rotation.x = -Math.PI / 2; sh.position.y = 0.04; sh.scale.set(m.shadow * 1.2, m.shadow * 1.2, 1); sh.raycast = () => {}; g.add(sh);
     if (e.kind === 'unit' || e.kind === 'building') {
       const ring = new THREE.Mesh(geo.ring, new THREE.MeshBasicMaterial({ color: 0xfacc15, side: THREE.DoubleSide, depthTest: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05;
       const r = e.kind === 'building' ? e.size * 0.75 : 1; ring.scale.set(r * 1.4, r * 1.4, 1); ring.visible = false; ring.renderOrder = 3; g.add(ring); g.userData.ring = ring;
       const bg = new THREE.Mesh(geo.plane, new THREE.MeshBasicMaterial({ color: 0x111111, depthTest: false })), fg = new THREE.Mesh(geo.plane, new THREE.MeshBasicMaterial({ color: 0x22c55e, depthTest: false }));
       bg.renderOrder = fg.renderOrder = 4; bg.scale.set(1, 0.14, 1); const bar = new THREE.Group(); bar.add(bg, fg); bar.visible = false; bar.position.y = e.kind === 'building' ? (e.gatherType ? 0.8 : e.type === 'house' ? 1.8 : 2.6) : 1.5; g.add(bar); g.userData.bar = { bar, fg };
     }
-    g.traverse(o => { if (o.isMesh && o !== g.userData.ring) o.userData.gid = e.id; });
+    g.traverse(o => { if (!o.isMesh) return; if (o === g.userData.ring || o === sh || o.parent === g.userData.bar?.bar || o.material?.blending === THREE.AdditiveBlending) { o.raycast = () => {}; return; } o.userData.gid = e.id; });
     return g;
   }
   const seen = new Set();
@@ -108,29 +86,27 @@ export function createView(container, game) {
     }
     for (const [id, g] of view.groups) if (!seen.has(id) || !game.entities.has(id)) { scene.remove(g); view.groups.delete(id); const i = view.pickables.indexOf(g); if (i >= 0) view.pickables.splice(i, 1); }
   };
-  const worldPos = e => e.kind === 'building' ? [e.x + e.size / 2, 0, e.y + e.size / 2] : [e.x, e.kind === 'relic' ? 0.2 : 0, e.y];
+  const worldPos = e => e.kind === 'building' ? [e.x + e.size / 2, 0, e.y + e.size / 2] : [e.x, e.kind === 'relic' ? (e.holder !== null ? 1.35 : 0.2) : 0, e.y];
   view.frame = (dt, t) => {
     placeCamera();
     const k = Math.min(1, dt * 16);
     for (const g of view.groups.values()) {
       const e = g.userData.entity; if (!e) continue;
       const [x, y, z] = worldPos(e);
+      const ud = g.userData; let moving = false;
       if (e.kind === 'unit') {
         g.position.x += (x - g.position.x) * k; g.position.z += (z - g.position.z) * k;
-        const moving = Math.hypot(x - g.position.x, z - g.position.z) > 0.02;
-        g.position.y = moving ? Math.abs(Math.sin(t * 12 + e.id)) * 0.08 : 0;
-        if (moving) g.rotation.y = Math.atan2(x - g.position.x, z - g.position.z);
-        else if (e.order.type === 'attack' && e.cd > e.cooldown - 6) g.position.y = 0.12;
-        else if (e.order.type === 'gather' && e.order.phase === 'work') g.rotation.z = Math.sin(t * 14 + e.id) * 0.12;
-        else g.rotation.z = 0;
-        if (e.relic !== null) g.position.y += 0.4;
+        const dx = x - g.position.x, dz = z - g.position.z; moving = Math.hypot(dx, dz) > 0.03;
+        let face = null;
+        if (moving) face = Math.atan2(dx, dz);
+        else { const o = e.order, tgt = o.target !== undefined ? game.entities.get(o.target) : o.res !== undefined ? game.entities.get(o.res) : null; if (tgt) { const c = tgt.kind === 'building' ? { x: tgt.x + tgt.size / 2, y: tgt.y + tgt.size / 2 } : tgt; face = Math.atan2(c.x - e.x, c.y - e.y); } }
+        if (face !== null) { let d = face - g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); g.rotation.y += d * Math.min(1, dt * 12); }
+        g.position.y = e.relic !== null ? 0.25 : 0;
       } else g.position.set(x, y, z);
-      if (e.kind === 'building') { const p = e.constructed ? 1 : 0.2 + 0.8 * e.progress; g.scale.y = p; if (e.gatherType) g.scale.y = 1; }
-      if (e.kind === 'resource' && e.type === 'tree') { const s = 0.5 + 0.5 * Math.min(1, e.amount / 100); g.scale.setScalar(s * 1.0 + 0.0); g.scale.y = s; }
-      else if (e.kind === 'resource') g.scale.setScalar(0.6 + 0.4 * Math.min(1, e.amount / (e.type === 'berry' ? 200 : 600)));
-      const ud = g.userData;
+      if (e.kind === 'unit' || e.kind === 'building') { if (e.hp < ud.hp - 0.01) ud.pop = 0.12; ud.hp = e.hp; if (ud.pop > 0) { ud.pop -= dt; g.scale.setScalar(1 + Math.max(0, ud.pop) * (e.kind === 'unit' ? 1.6 : 0.25)); } else g.scale.setScalar(1); }
+      animate(g, e, t, moving);
       if (ud.ring) ud.ring.visible = view.selection.has(e.id);
-      if (ud.bar) { const show = view.selection.has(e.id) || e.hp < e.maxHp; ud.bar.bar.visible = show; if (show) { const f = Math.max(0.001, e.hp / e.maxHp); ud.bar.bar.quaternion.copy(camera.quaternion); ud.bar.fg.scale.set(f, 0.14, 1); ud.bar.fg.position.x = (f - 1) / 2; ud.bar.fg.position.z = 0.001; ud.bar.fg.material.color.setHex(f > 0.5 ? 0x22c55e : f > 0.25 ? 0xeab308 : 0xef4444); } }
+      if (ud.bar) { const show = view.selection.has(e.id) || e.hp < e.maxHp; ud.bar.bar.visible = show; if (show) { const f = Math.max(0.001, e.hp / e.maxHp); ud.bar.bar.parent.getWorldQuaternion(_wq).invert(); ud.bar.bar.quaternion.copy(_wq).multiply(camera.quaternion); ud.bar.fg.scale.set(f, 0.14, 1); ud.bar.fg.position.x = (f - 1) / 2; ud.bar.fg.position.z = 0.001; ud.bar.fg.material.color.setHex(f > 0.5 ? 0x22c55e : f > 0.25 ? 0xeab308 : 0xef4444); } }
     }
     fog.visible = view.fogEnabled;
     renderer.render(scene, camera);

@@ -26,3 +26,7 @@ Final: minor (deferred): clicking a relic shows HP NaN
 Final: minor (deferred): queued units not refunded when producer dies
 Final: minor (deferred): ?round= out of range throws
 Note: after fixes, Relics ends by relics in only 1/12 bot games (was 5/12): conquest now fires sooner
+Model upgrade (bounded, approved): new src/render/models.js (procedural baked vertex-colored models: 12 unit types w/ articulated limbs+horse+catapult, 11 building types w/ scaffolding, varied trees/rocks/bushes, relic shrine), shadows, hit-pop, facing; view.js integrates; fixed HP bar tilt. npm test 49/49; autotour seed 6 champion, 0 errors, peak 603 draw calls
+Not verified: animations only seen as still frames (no video), no real-GPU fps measurement
+Phone/touch UI (bounded, approved): touch gestures in input.js (tap select/order, drag pan, pinch, box-select toggle, place ghost+confirm), phone layout both orientations (safe-area, overlays, 48px targets), game menu, camera framing by width in portrait, compact menus, bracket buttons above list. Verified in Chrome iPhone-17-Pro emulation (402x874, 874x402 @3x) with dispatched TouchEvents; desktop regression re-run OK; npm test 49/49; phone autotour champion 0 errors. NOT verified: real iPhone/Safari (WebGL, safe-area, real touch feel), multi-touch on hardware.
+Resolved deferred minors: resize listener leak, hotkeys on menu (guard added)
