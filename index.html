@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="theme-color" content="#231a11">
+<title>Age of Knockout</title>
+<link rel="icon" href="data:,"><link rel="stylesheet" href="styles.css">
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+</head>
+<body>
+<div id="app">
+  <div id="viewport"></div>
+  <div id="dragbox" class="hidden"></div>
+  <div id="topbar"></div>
+  <div id="bottom">
+    <div id="minimap-wrap"><canvas id="minimap" width="220" height="130"></canvas></div>
+    <div id="info"></div>
+    <div id="cmds"></div>
+  </div>
+  <div id="objective"></div>
+  <div id="touchbar">
+    <button data-act="idle" aria-label="Next idle villager">&#9874;<b class="badge"></b></button>
+    <button data-act="home" aria-label="Go to Town Center">&#8962;</button>
+    <button data-act="box" aria-label="Box select mode">&#9645;</button>
+    <button data-act="clear" aria-label="Deselect">&#10005;</button>
+  </div>
+  <div id="placebar" class="hidden"><button data-act="place-cancel" class="btn">&#10005; Cancel</button><button data-act="place-ok" class="btn ok">&#10003; Place</button></div>
+  <div id="gamemenu" class="hidden"></div>
+  <div id="toast"></div>
+  <div id="screen" class="hidden"></div>
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
