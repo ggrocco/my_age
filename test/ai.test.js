@@ -24,7 +24,7 @@ test('bot at AI Future age trains future units and caps siege at 2', () => {
   for (let i = 0; i < 12000; i++) {
     g.tick();
     if (i % 15 === 0) {
-      p.res = { food: 9000, wood: 9000, gold: 9000, stone: 9000 }; p.popCap = 60; b.think();
+      p.res = { food: 9000, wood: 9000, gold: 9000, stone: 9000 }; b.think();
       const alive = [...g.units.values()].filter(u => u.owner === 0 && u.cls === 'siege'), queued = [...g.buildings.values()].filter(x => x.owner === 0).reduce((n, x) => n + x.queue.filter(q => UNITS[q.unit].cls === 'siege').length, 0);
       maxSiege = Math.max(maxSiege, alive.length + queued);
       for (const u of alive) if (u.type === 'railgun') railguns.add(u.id);
@@ -36,4 +36,5 @@ test('bot at AI Future age trains future units and caps siege at 2', () => {
   assert.ok(mine.filter(u => u.cls === 'siege').length <= 2, 'siege cap');
   assert.ok(maxSiege <= 2, 'siege alive + queued never exceeded 2, peak ' + maxSiege);
   assert.ok(b.maxRejects <= 20, 'rejects ' + b.maxRejects);
+  assert.deepEqual(Object.keys(b.why).filter(k => k.startsWith('train')), [], 'bot never had a train command rejected');
 });

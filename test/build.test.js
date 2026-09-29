@@ -64,7 +64,7 @@ test('iron age can advance to AI Future; then max age', () => {
   const r = g.command(0, { type: 'age' }); assert.equal(r.ok, true, r.reason);
   for (let i = 0; i < 1300; i++) g.tick();
   assert.equal(p.age, 'future');
-  assert.equal(g.command(0, { type: 'age' }).ok, false);
+  const again = g.command(0, { type: 'age' }); assert.equal(again.ok, false); assert.equal(again.reason, 'max age');
 });
 test('future units are age-gated and trainable at their buildings', () => {
   const g = createGame({ seed: 1 }); const p = g.players[0]; p.res = { food: 5000, wood: 5000, gold: 5000, stone: 5000 };
@@ -75,5 +75,5 @@ test('future units are age-gated and trainable at their buildings', () => {
 });
 test('railgun cannot carry relics', () => {
   const g = createGame({ seed: 1 }); const r = g.spawnRelic(20.5, 20.5), u = g.spawnUnit('railgun', 0, 20.5, 20.5);
-  assert.equal(g.command(0, { type: 'relic', ids: [u.id], relicId: r.id }).ok, false);
+  const res = g.command(0, { type: 'relic', ids: [u.id], relicId: r.id }); assert.equal(res.ok, false); assert.equal(res.reason, 'no carriers');
 });
