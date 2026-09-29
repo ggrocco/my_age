@@ -16,19 +16,30 @@ export function createTournament(seed = 1) {
     get round() { return ROUNDS[this.roundIndex]; },
     get human() { return this.alive[0]; },
     get opponent() { const o = this.alive[1]; return { ...o, difficulty: HUMAN_OPPONENT[this.roundIndex] }; },
+    // Same as resolve() but simulates one off-screen match per macrotask so a UI stays responsive.
+    async resolveAsync(humanWon, { onProgress, simulate = simulateMatch } = {}) {
+      if (!humanWon) return this.resolve(false);
+      const ri = this.roundIndex, round = ROUNDS[ri], cache = new Map(), total = (this.alive.length - 2) / 2; let done = 0;
+      for (let i = 2; i < this.alive.length; i += 2) {
+        await new Promise(r => setTimeout(r, 0));
+        const s = this.seed * 1000 + ri * 50 + i; cache.set(s, simulate(round.id, s, [this.alive[i].difficulty, this.alive[i + 1].difficulty]));
+        onProgress?.(++done, total);
+      }
+      return this.resolve(humanWon, (id, s) => cache.get(s));
+    },
     // Record the outcome of the human's match, simulate every other match of the round, advance.
     resolve(humanWon, simulate = simulateMatch) {
       if (this.over) throw new Error('tournament is over');
       const ri = this.roundIndex, round = ROUNDS[ri], next = [], results = [];
       results.push({ a: this.alive[0].name, b: this.alive[1].name, winner: humanWon ? this.alive[0].name : this.alive[1].name, human: true });
-      next.push(humanWon ? this.alive[0] : this.alive[1]);
+      if (!humanWon) { this.history.push({ round: round.id, results }); this.over = true; this.lostIn = ri; return this; }
+      next.push(this.alive[0]);
       for (let i = 2; i < this.alive.length; i += 2) {
         const a = this.alive[i], b = this.alive[i + 1];
         const m = simulate(round.id, seed * 1000 + ri * 50 + i, [a.difficulty, b.difficulty]);
         const w = m.winner === 1 ? b : a; next.push(w); results.push({ a: a.name, b: b.name, winner: w.name, reason: m.reason });
       }
       this.history.push({ round: round.id, results });
-      if (!humanWon) { this.over = true; return this; }
       this.alive = next; this.roundIndex++;
       if (this.alive.length === 1) { this.over = true; this.champion = this.alive[0]; }
       return this;

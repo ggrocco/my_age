@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Age of Knockout</title>
+<link rel="icon" href="data:,"><link rel="stylesheet" href="styles.css">
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js"}}</script>
+</head>
+<body>
+<div id="app">
+  <div id="viewport"></div>
+  <div id="dragbox" class="hidden"></div>
+  <div id="topbar"></div>
+  <div id="bottom">
+    <div id="minimap-wrap"><canvas id="minimap" width="220" height="130"></canvas></div>
+    <div id="info"></div>
+    <div id="cmds"></div>
+  </div>
+  <div id="toast"></div>
+  <div id="screen" class="hidden"></div>
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

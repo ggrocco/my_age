@@ -74,13 +74,18 @@ export function createBot(game, pid, difficulty = 'medium') {
 
     // --- houses
     const housesBuilding = buildings.filter(b => b.type === 'house' && !b.constructed).length;
-    if (me.popCap < 50 && me.pop + 3 >= me.popCap && !housesBuilding && vills.length) tryBuild('house', vills, home);
+    if (me.popCap < 50 && me.pop + 3 >= me.popCap && housesBuilding < (roundId === 'deathmatch' ? 3 : 1) && vills.length) tryBuild('house', vills, home);
 
     // --- buildings & age
     const free = vills.filter(v => v.order.type !== 'build');
     if (vills.length >= 5 && count('barracks') < 1) tryBuild('barracks', free, home);
     if (vills.length >= 7 && count('storage_pit') < 1 && count('granary') < 1) tryBuild('storage_pit', free, home);
-    if (roundId === 'deathmatch' && count('barracks') < 3 && vills.length >= 5) tryBuild('barracks', free, home);
+    const dm = roundId === 'deathmatch'; // rich start: mass production buildings instead of a slow economy
+    if (dm && vills.length >= 5) {
+      if (count('barracks') < 4) tryBuild('barracks', free, home);
+      else if (ageIndex(me.age) >= 1 && count('archery_range') < 2) tryBuild('archery_range', free, home);
+      else if (ageIndex(me.age) >= 1 && count('stable') < 2) tryBuild('stable', free, home);
+    }
     if (difficulty === 'hard' && vills.length >= 14 && count('barracks') < 2) tryBuild('barracks', free, home);
     bot.saving = false;
     if (!me.ageUp && vills.length >= (roundId === 'wonder' ? 5 : Math.min(9, D.villagers * 0.5)) && ageIndex(me.age) < AGES.length - 1) {
@@ -104,10 +109,11 @@ export function createBot(game, pid, difficulty = 'medium') {
     if (idle.length) assign(idle, vills, tc, home, done);
 
     // --- military production
+    const armyCap = roundId === 'deathmatch' ? 44 : D.army;
     const armyCount = army.length + done.reduce((n, b) => n + b.queue.filter(q => UNITS[q.unit].cls !== 'civ').length, 0);
-    if (!bot.saving && armyCount < D.army && (vills.length >= D.villagers * 0.6 || roundId === 'deathmatch' || roundId === 'wonder')) {
+    if (!bot.saving && armyCount < armyCap && (vills.length >= D.villagers * 0.6 || roundId === 'deathmatch' || roundId === 'wonder')) {
       for (const b of done) {
-        const trains = BUILDINGS[b.type].trains || []; if (b.type === 'town_center' || b.queue.length >= 2) continue;
+        const trains = BUILDINGS[b.type].trains || []; if (b.type === 'town_center' || b.queue.length >= (roundId === 'deathmatch' ? 4 : 2)) continue;
         const u = bestUnit(trains); if (!u || !canPay(UNITS[u].cost) || me.pop >= me.popCap) continue;
         if (u === 'catapult' && army.filter(a => a.type === 'catapult').length >= 2) continue;
         cmd({ type: 'train', buildingId: b.id, unit: u });
@@ -185,7 +191,10 @@ export function createBot(game, pid, difficulty = 'medium') {
     }
     const combat = army.filter(u => u.type !== 'catapult' || true);
     const rush = roundId === 'wonder'; // contest the Wonder while it is being built
-    if (!bot.waveActive && game.time >= (rush ? 3600 : D.attackAt) && combat.length >= (rush ? 5 : D.wave)) bot.waveActive = true;
+    // Death Match: whoever attacks piecemeal loses to defenders, so wait for a big army (bigger for harder bots)
+    const dmWave = { easy: 24, medium: 32, hard: 38 }[difficulty];
+    const needWave = rush ? 5 : roundId === 'deathmatch' ? dmWave : D.wave, needTime = rush ? 3600 : roundId === 'deathmatch' ? 6000 : D.attackAt;
+    if (!bot.waveActive && game.time >= needTime && combat.length >= needWave) bot.waveActive = true;
     if (bot.waveActive && combat.length < 3) bot.waveActive = false;
     if (!bot.waveActive) return;
     const cx = combat.reduce((s, u) => s + u.x, 0) / combat.length, cy = combat.reduce((s, u) => s + u.y, 0) / combat.length, c = { x: cx, y: cy };

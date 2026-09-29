@@ -19,3 +19,9 @@ test('opponent difficulty ramps up', () => {
 test('real off-screen simulation resolves round 1', () => {
   const t = createTournament(2); t.resolve(true); assert.equal(t.alive.length, 16); assert.equal(t.history[0].results.length, 16);
 });
+test('resolveAsync gives the same bracket as resolve', async () => {
+  const stubSim = (id, seed) => ({ winner: seed % 2, reason: 'stub' });
+  const a = createTournament(3), b = createTournament(3); a.resolve(true, stubSim); let prog = 0;
+  await b.resolveAsync(true, { simulate: stubSim, onProgress: () => prog++ });
+  assert.deepEqual(a.alive.map(p => p.id), b.alive.map(p => p.id)); assert.equal(prog, 15);
+});
