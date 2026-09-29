@@ -31,6 +31,24 @@ A 32-player knockout bracket of 1v1 AoE1-style RTS matches vs AI; five rounds, e
 
 Tests cover the sim, rounds, bot and bracket headlessly (Node test runner); the renderer/UI has no automated tests and was only checked via screenshots/emulation.
 
+## Testing in the browser (required)
+
+`npm test` is headless and never touches `src/render`, `src/ui`, `src/main.js`, `styles.css` or `index.html`. **Always verify your change in a real browser before calling it done** — not just when it is "UI work". A sim/data change that adds or alters something the player can see or click (a unit, building, age, HUD label, round rule) also needs a browser check that it appears and works. Run `npm test` too, but it is not a substitute.
+
+How:
+
+1. Start the server with `preview_start` (name `my-age`, defined in `.claude/launch.json`: `python3 -m http.server 8000`). Don't run it via Bash.
+2. Drive the page with the built-in browser tools (`mcp__Claude_Browser__*`), not the Chrome extension unless asked: `navigate` to `http://localhost:8000/?...`, `computer` screenshot, `read_console_messages` (must be free of errors), `javascript_tool` for state.
+3. Screenshot the actual thing you changed, look at it, and check the console. If nothing on screen changed, suspect a stale module cache and hard-reload before debugging.
+4. In your final message, say what you verified in the browser and what you could not.
+
+Shortcuts (URL params are listed under Commands; `window.__app.match.game` is the live sim):
+
+- Skip the menus: `?round=3&opp=easy&seed=1`. Fast-forward with `&speed=8`; `&autoplay=1` lets the bot play your side to reach later ages and bigger armies.
+- Jump to state instead of playing there, from `javascript_tool`: `const p = __app.match.game.players[0]; p.age = 'future'; p.res = {food: 9999, wood: 9999, gold: 9999, stone: 9999};` then use the real UI (train, build, age-up button) and read the HUD.
+- Phone layout: `?touch=1` plus `resize_window` to 402x874 and 874x402; touch input needs dispatched `TouchEvent`s. Reset the viewport with preset `desktop` afterwards.
+- Whole flow: `?autotour=1` should reach a champion/eliminated screen with no console errors.
+
 ## Deployment
 
 `Dockerfile` copies only `index.html`, `styles.css`, `src/` and the two three.js folders the import map references (`node_modules/three/build`, `.../examples/jsm`) into nginx. If `index.html`'s import map or static assets change, update the Dockerfile `COPY` lines.
