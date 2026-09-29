@@ -115,7 +115,7 @@ export function createBot(game, pid, difficulty = 'medium') {
       for (const b of done) {
         const trains = BUILDINGS[b.type].trains || []; if (b.type === 'town_center' || b.queue.length >= (roundId === 'deathmatch' ? 4 : 2)) continue;
         const u = bestUnit(trains); if (!u || !canPay(UNITS[u].cost) || me.pop >= me.popCap) continue;
-        if (u === 'catapult' && army.filter(a => a.type === 'catapult').length >= 2) continue;
+        if (UNITS[u].cls === 'siege' && army.filter(a => a.cls === 'siege').length + done.reduce((n, x) => n + x.queue.filter(q => UNITS[q.unit].cls === 'siege').length, 0) >= 2) continue;
         cmd({ type: 'train', buildingId: b.id, unit: u });
       }
     }
@@ -124,12 +124,14 @@ export function createBot(game, pid, difficulty = 'medium') {
     orderArmy(army, enemies, home, roundId, vis);
   }
 
+  const SIEGE = ['railgun', 'catapult'];
   function bestUnit(trains) {
-    const pref = ['swordsman', 'hoplite', 'catapult', 'horse_archer', 'axeman', 'bowman', 'spearman', 'clubman', 'slinger'];
+    const pref = ['mech', 'railgun', 'swordsman', 'hoplite', 'catapult', 'drone', 'horse_archer', 'axeman', 'bowman', 'spearman', 'clubman', 'slinger'];
     const ok = pref.filter(u => trains.includes(u) && ageIndex(UNITS[u].age) <= ageIndex(me.age));
     if (!ok.length) return null;
-    if (ok.includes('catapult') && game.time % 3 === 0) return 'catapult';
-    return ok.find(u => u !== 'catapult');
+    const siege = ok.find(u => SIEGE.includes(u));
+    if (siege && game.time % 3 === 0) return siege;
+    return ok.find(u => !SIEGE.includes(u)) || siege;
   }
 
   function dropDist(kind, p, done) {
@@ -180,7 +182,7 @@ export function createBot(game, pid, difficulty = 'medium') {
       const assigned = new Set(army.filter(a => a.order.type === 'relic').map(a => a.order.relic));
       for (const r of game.relics.values()) {
         if (r.holder !== null || r.stored !== null || assigned.has(r.id)) continue;
-        const u = army.filter(a => a.relic === null && a.type !== 'catapult' && a.order.type !== 'relic').sort((a, b) => dist(a, r) - dist(b, r))[0];
+        const u = army.filter(a => a.relic === null && a.cls !== 'siege' && a.order.type !== 'relic').sort((a, b) => dist(a, r) - dist(b, r))[0];
         if (u && dist(u, r) < 40) { cmd({ type: 'relic', ids: [u.id], relicId: r.id }); assigned.add(r.id); }
       }
     }
@@ -189,7 +191,7 @@ export function createBot(game, pid, difficulty = 'medium') {
       for (const u of idle) cmd({ type: 'attack', ids: [u.id], targetId: t.id });
       return;
     }
-    const combat = army.filter(u => u.type !== 'catapult' || true);
+    const combat = army;
     const rush = roundId === 'wonder'; // contest the Wonder while it is being built
     // Death Match: whoever attacks piecemeal loses to defenders, so wait for a big army (bigger for harder bots)
     const dmWave = { easy: 24, medium: 32, hard: 38 }[difficulty];

@@ -13,3 +13,14 @@ test('bot builds an economy and army in 10 minutes without command spam', () => 
   assert.ok(ageIndex(g.players[0].age) >= 1); assert.ok(g.players[0].kills + mine.filter(u => u.cls !== 'civ').length >= 5);
   assert.ok(b.maxRejects <= 20, 'rejects ' + b.maxRejects);
 });
+test('bot at AI Future age trains future units and caps siege at 2', () => {
+  const g = createGame({ seed: 4, rules: roundById('conquest') }); const b = createBot(g, 0, 'hard');
+  const p = g.players[0]; p.age = 'future'; p.res = { food: 9000, wood: 9000, gold: 9000, stone: 9000 };
+  const t = [...g.buildings.values()].find(x => x.owner === 0 && x.type === 'town_center');
+  g.addBuilding('barracks', 0, t.x - 8, t.y, true); g.addBuilding('archery_range', 0, t.x + 8, t.y, true); g.addBuilding('government_center', 0, t.x, t.y + 8, true);
+  for (let i = 0; i < 6000; i++) { g.tick(); if (i % 15 === 0) { p.res = { food: 9000, wood: 9000, gold: 9000, stone: 9000 }; p.popCap = 60; b.think(); } }
+  const mine = [...g.units.values()].filter(u => u.owner === 0);
+  assert.ok(mine.some(u => ['mech', 'drone', 'railgun'].includes(u.type)), 'trained a future unit');
+  assert.ok(mine.filter(u => u.cls === 'siege').length <= 2, 'siege cap');
+  assert.ok(b.maxRejects <= 20, 'rejects ' + b.maxRejects);
+});
