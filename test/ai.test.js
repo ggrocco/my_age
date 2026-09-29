@@ -38,3 +38,16 @@ test('bot at AI Future age trains future units and caps siege at 2', () => {
   assert.ok(b.maxRejects <= 20, 'rejects ' + b.maxRejects);
   assert.deepEqual(Object.keys(b.why).filter(k => k.startsWith('train')), [], 'bot never had a train command rejected');
 });
+test('bot at AI Future age falls back to affordable units when the top pick costs gold', () => {
+  const g = createGame({ seed: 4, rules: roundById('conquest') }); const b = createBot(g, 0, 'hard');
+  const p = g.players[0]; p.age = 'future';
+  const broke = () => { p.res = { food: 9000, wood: 9000, gold: 0, stone: 9000 }; }; broke(); // gold-free economy: drone/mech/swordsman are unaffordable
+  const t = [...g.buildings.values()].find(x => x.owner === 0 && x.type === 'town_center');
+  g.addBuilding('barracks', 0, t.x - 8, t.y, true); g.addBuilding('archery_range', 0, t.x + 8, t.y, true);
+  for (let k = 0; k < 20; k++) g.spawnUnit('villager', 0, t.x + 2 + k % 5, t.y + 4); // enough villagers that the bot starts military production
+  for (let i = 0; i < 6000; i++) { g.tick(); if (i % 15 === 0) { broke(); b.think(); } }
+  const mine = [...g.units.values()].filter(u => u.owner === 0);
+  assert.ok(mine.some(u => u.type === 'bowman'), 'archery range trained the gold-free bowman');
+  assert.ok(!mine.some(u => u.type === 'drone'), 'no drone (needs gold the bot never has)');
+  assert.deepEqual(Object.keys(b.why).filter(k => k.startsWith('train')), [], 'bot never had a train command rejected');
+});

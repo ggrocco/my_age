@@ -127,8 +127,10 @@ export function createBot(game, pid, difficulty = 'medium') {
   const SIEGE = ['railgun', 'catapult'];
   function bestUnit(trains) {
     const pref = ['mech', 'railgun', 'swordsman', 'hoplite', 'catapult', 'drone', 'horse_archer', 'axeman', 'bowman', 'spearman', 'clubman', 'slinger'];
-    const ok = pref.filter(u => trains.includes(u) && ageIndex(UNITS[u].age) <= ageIndex(me.age));
-    if (!ok.length) return null;
+    const known = pref.filter(u => trains.includes(u) && ageIndex(UNITS[u].age) <= ageIndex(me.age));
+    if (!known.length) return null;
+    const affordable = known.filter(u => canPay(UNITS[u].cost)); // prefer the best unit we can actually pay for right now
+    const ok = affordable.length ? affordable : known; // none affordable: caller's canPay check skips this building
     const siege = ok.find(u => SIEGE.includes(u));
     if (siege && game.time % 3 === 0) return siege;
     return ok.find(u => !SIEGE.includes(u)) || siege;
