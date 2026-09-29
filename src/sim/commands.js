@@ -20,6 +20,20 @@ export function canPlace(game, pid, type, x, y) {
   return true;
 }
 
+export function ageUpProblem(game, pid) {
+  const p = game.players[pid];
+  if (p.ageUp) return 'already researching';
+  const next = AGES[ageIndex(p.age) + 1]; if (!next) return 'max age';
+  const owned = new Set(), avail = new Set();
+  for (const [id, d] of Object.entries(BUILDINGS)) if (d.age === p.age && id !== 'town_center' && !d.extra) avail.add(id);
+  let hasTC = false;
+  for (const b of game.buildings.values()) if (b.owner === pid && b.constructed) { if (b.type === 'town_center') hasTC = true; if (avail.has(b.type)) owned.add(b.type); }
+  if (!hasTC) return 'needs town center';
+  if (owned.size < Math.min(2, avail.size)) return 'needs buildings';
+  if (!canAfford(p, AGE_COST[next].cost)) return 'resources';
+  return null;
+}
+
 export function execute(game, pid, cmd) {
   const p = game.players[pid];
   if (!p || game.result) return fail('no game');
@@ -62,15 +76,8 @@ export function execute(game, pid, cmd) {
       return OK;
     }
     case 'age': {
-      if (p.ageUp) return fail('already researching');
-      const next = AGES[ageIndex(p.age) + 1]; if (!next) return fail('max age');
-      const info = AGE_COST[next]; if (!canAfford(p, info.cost)) return fail('resources');
-      const owned = new Set(), avail = new Set();
-      for (const [id, d] of Object.entries(BUILDINGS)) if (d.age === p.age && id !== 'town_center' && !d.extra) avail.add(id);
-      let hasTC = false;
-      for (const b of game.buildings.values()) if (b.owner === pid && b.constructed) { if (b.type === 'town_center') hasTC = true; if (avail.has(b.type)) owned.add(b.type); }
-      if (!hasTC) return fail('needs town center');
-      if (owned.size < Math.min(2, avail.size)) return fail('needs buildings');
+      const why = ageUpProblem(game, pid); if (why) return fail(why);
+      const next = AGES[ageIndex(p.age) + 1], info = AGE_COST[next];
       pay(p, info.cost); p.ageUp = { to: next, remaining: secs(info.time) };
       return OK;
     }
