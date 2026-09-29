@@ -6,9 +6,9 @@ import { canPlace, canAfford, ageUpProblem } from '../sim/commands.js';
 import { RES_KIND, centerOf, distPoint } from '../sim/util.js';
 
 const DIFF = {
-  easy:   { every: 30, villagers: 12, wave: 14, attackAt: 9000, army: 20 },
-  medium: { every: 15, villagers: 20, wave: 10, attackAt: 6000, army: 28 },
-  hard:   { every: 10, villagers: 26, wave: 8,  attackAt: 4500, army: 30 },
+  easy:   { every: 30, villagers: 12, wave: 12, attackAt: 10000, army: 16 },
+  medium: { every: 15, villagers: 20, wave: 14, attackAt: 8000, army: 28 },
+  hard:   { every: 10, villagers: 26, wave: 18, attackAt: 8000, army: 36 },
 };
 const SHARE = { food: 0.35, wood: 0.35, gold: 0.2, stone: 0.1 };
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -55,12 +55,12 @@ export function createBot(game, pid, difficulty = 'medium') {
 
   function think() {
     if (game.result) return;
-    const tc = mine('buildings').find(b => b.type === 'town_center' && b.constructed) || mine('buildings').find(b => b.constructed);
+    const tc = mine('buildings').find(b => b.type === 'town_center' && b.constructed), anyBase = tc || mine('buildings').find(b => b.constructed);
     const units = mine('units'), vills = units.filter(u => u.type === 'villager');
     const army = units.filter(u => u.cls !== 'civ' && u.type !== 'king');
     const roundId = game.rules ? game.rules.id : 'conquest';
-    if (!tc && !vills.length && !army.length) return;
-    const home = tc ? centerOf(tc) : (units[0] || game.map.starts[pid]);
+    if (!anyBase && !vills.length && !army.length) return;
+    const home = anyBase ? centerOf(anyBase) : (units[0] || game.map.starts[pid]);
     const buildings = mine('buildings'), done = buildings.filter(b => b.constructed);
     const vis = game.visibleEntities(pid), enemies = vis.filter(e => e.owner === enemy && (e.kind === 'unit' || e.kind === 'building'));
 
