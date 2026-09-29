@@ -24,7 +24,7 @@ export function findPath(map, blocked, from, to, isGoal) {
     if (goal(x, y)) { const out = []; for (let k = i; k !== s; k = prev[k]) out.push({ x: k % n, y: (k / n) | 0 }); return out.reverse(); }
     for (const [dx, dy] of DIRS) {
       const nx = x + dx, ny = y + dy;
-      if (!free(nx, ny) && !(isGoal && isGoal(nx, ny) && nx >= 0 && ny >= 0 && nx < n && ny < n && map.tiles[ny * n + nx] !== 1)) continue;
+      if (!free(nx, ny)) continue;
       if (dx && dy && (!free(x + dx, y) || !free(x, y + dy))) continue;
       const j = ny * n + nx, ng = g[i] + (dx && dy ? 1.414 : 1);
       if (ng < g[j]) { g[j] = ng; prev[j] = i; open.push({ i: j, f: ng + h(nx, ny) }); }
