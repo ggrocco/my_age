@@ -50,7 +50,7 @@ function startMatch({ roundId, seed, oppDiff, label, onEnd }) {
   return m;
 }
 
-const REASON = { conquest: w => w ? 'Every enemy unit and building was destroyed.' : 'Your empire was destroyed.', regicide: w => w ? 'You slew the enemy King!' : 'Your King has fallen.', wonder: w => w ? 'Your Wonder stood for three minutes.' : 'The enemy Wonder stood for three minutes.',
+const REASON = { resigned: w => w ? 'The enemy resigned.' : 'You resigned.', conquest: w => w ? 'Every enemy unit and building was destroyed.' : 'Your empire was destroyed.', regicide: w => w ? 'You slew the enemy King!' : 'Your King has fallen.', wonder: w => w ? 'Your Wonder stood for three minutes.' : 'The enemy Wonder stood for three minutes.',
   relics: w => w ? 'You held all the relics.' : 'The enemy held all the relics.', 'time cap': w => 'Time ran out; decided on score.', 'mutual destruction': () => 'Both empires fell; decided on score.', 'both kings fell': () => 'Both kings fell; decided on score.' };
 function showResult(m) {
   const r = m.game.result, won = r.winner === 0, p = m.game.players;

@@ -24,7 +24,9 @@ export function createGame({ seed = 1, rules = null, size = 64 } = {}) {
     const d = BUILDINGS[type];
     const e = { id: game.nextId++, kind: 'building', type, owner, x, y, size: d.size, maxHp: d.hp, hp: constructed ? d.hp : 1, constructed, progress: constructed ? 1 : 0,
       queue: [], workers: 0, sight: d.sight, armor: 0, dead: false, gatherType: d.gatherType || null, amount: d.amount || 0 };
-    game.entities.set(e.id, e); game.buildings.set(e.id, e); mark(e, e.id); return e;
+    game.entities.set(e.id, e); game.buildings.set(e.id, e); mark(e, e.id);
+    for (const u of game.units.values()) if (u.x >= x && u.x <= x + e.size && u.y >= y && u.y <= y + e.size) { const sp = game.findSpawn(e); u.x = sp.x; u.y = sp.y; u.path = null; }
+    return e;
   };
   game.spawnUnit = (type, owner, x, y) => {
     const d = UNITS[type];
@@ -36,8 +38,17 @@ export function createGame({ seed = 1, rules = null, size = 64 } = {}) {
   game.spawnRelic = (x, y) => { const r = { id: game.nextId++, kind: 'relic', x, y, holder: null, stored: null, dead: false }; game.entities.set(r.id, r); game.relics.set(r.id, r); return r; };
   game.relicOwner = r => r.holder !== null ? game.entities.get(r.holder)?.owner ?? null : r.stored !== null ? game.entities.get(r.stored)?.owner ?? null : null;
 
+  const freeTileNear = (x, y) => {
+    const cx = Math.floor(x), cy = Math.floor(y);
+    for (let r = 0; r <= 8; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+      const tx = cx + dx, ty = cy + dy;
+      if (tx >= 0 && ty >= 0 && tx < n && ty < n && map.tiles[ty * n + tx] !== 1 && !occ[ty * n + tx]) return { x: tx + 0.5, y: ty + 0.5 };
+    }
+    return { x, y };
+  };
   const dropRelics = (e, x, y) => {
-    for (const r of game.relics.values()) if ((e.kind === 'unit' && r.holder === e.id) || (e.kind === 'building' && r.stored === e.id)) { r.holder = null; r.stored = null; r.x = x; r.y = y; }
+    for (const r of game.relics.values()) if ((e.kind === 'unit' && r.holder === e.id) || (e.kind === 'building' && r.stored === e.id)) { const t = freeTileNear(x, y); r.holder = null; r.stored = null; r.x = t.x; r.y = t.y; }
     if (e.kind === 'unit') e.relic = null;
   };
   game.remove = e => {

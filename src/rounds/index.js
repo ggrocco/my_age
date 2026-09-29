@@ -1,3 +1,4 @@
+import { BUILDINGS } from '../data/buildings.js';
 // Round rules. check(game) returns null or {winner, reason}. Every round has capTicks and a score tiebreak.
 export const WONDER_TICKS = 3600, RELIC_TICKS = 3600;
 
@@ -11,9 +12,10 @@ const tiebreak = (game, reason, bonus = [0, 0]) => {
   const s = [scoreOf(game, 0) + bonus[0], scoreOf(game, 1) + bonus[1]];
   return { winner: s[1] > s[0] ? 1 : 0, reason, scores: s };
 };
+// A side is out when it has no units and nothing that can make units (or a standing Wonder): it can never act again.
 export const isEliminated = (game, pid) => {
   for (const u of game.units.values()) if (u.owner === pid) return false;
-  for (const b of game.buildings.values()) if (b.owner === pid && !b.gatherType) return false;
+  for (const b of game.buildings.values()) if (b.owner === pid && b.constructed && (BUILDINGS[b.type].trains?.length || b.type === 'wonder')) return false;
   return true;
 };
 function conquest(game, capReason, bonus) {

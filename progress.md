@@ -14,3 +14,15 @@ Task 10: complete (renderer/UI; found+fixed camera never updating, minimap getIm
 Task 11: browser pass done: 5 rounds x start/mid/result screenshots read; full tournament chain (autotour seed 6: champion, seeds 1-4: eliminated) no page errors; UI events via synthetic dispatch on visible devtools page
 Ruling: bot-vs-bot difficulty ordering is weak/noisy (hard bot wins ~2 of 5 rounds vs tournament opponents; deathmatch easy>=medium) — reported not fixed
 Ruling: autoplay/test bot defaults to hard via ?bot= ; tournament seed 6 chosen because hard bot wins all 5 (found by headless search)
+Final review: fresh reviewer (fable) — 3 Important, 7 Minor
+Final: fixed #1 units trapped in new footprint — review#1 RED->GREEN, suite 49/49
+Final: fixed #2 relics dropped on blocked tile / built over — review#2, review#2b RED->GREEN
+Final: fixed #3 stall with only houses left + no resign — review#3, review#3b RED->GREEN; Resign button verified in browser
+Final: minor (deferred): info panel shows live HP of enemy after it leaves vision (hud.js ui.inspect)
+Final: minor (deferred): carried relics count as held (round text says 'in your Town Center')
+Final: minor (deferred): window resize listener leaks per match (main.js)
+Final: minor (deferred): '.'/'h' hotkeys throw uncaught TypeError on menu screen (input.js onKey, ui.game null)
+Final: minor (deferred): clicking a relic shows HP NaN
+Final: minor (deferred): queued units not refunded when producer dies
+Final: minor (deferred): ?round= out of range throws
+Note: after fixes, Relics ends by relics in only 1/12 bot games (was 5/12): conquest now fires sooner

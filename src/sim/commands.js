@@ -17,6 +17,7 @@ export function canPlace(game, pid, type, x, y) {
   for (let j = y; j < y + def.size; j++) for (let i = x; i < x + def.size; i++) {
     if (game.map.tiles[j * n + i] === 1 || game.occAt(i, j) || !p.explored[j * n + i]) return false;
   }
+  for (const r of game.relics.values()) if (r.holder === null && r.stored === null && r.x >= x && r.x < x + def.size && r.y >= y && r.y < y + def.size) return false;
   return true;
 }
 
@@ -64,6 +65,7 @@ export function execute(game, pid, cmd) {
       for (const u of us) { u.order = { type: 'build', target: b.id, fails: 0 }; u.path = null; u.retry = 0; }
       return OK;
     }
+    case 'resign': game.result = { winner: 1 - pid, reason: 'resigned' }; return OK;
     case 'construct': {
       const us = ownUnits(game, pid, cmd.ids).filter(u => u.type === 'villager'), b = game.entities.get(cmd.targetId);
       if (!us.length) return fail('no villagers');

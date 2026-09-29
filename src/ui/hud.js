@@ -25,7 +25,7 @@ export function createHud(ui) {
     const html = ['food', 'wood', 'gold', 'stone'].map(k => `<span class="res"><i class="dot" style="background:${COLORS[k]}"></i>${Math.floor(p.res[k])}</span>`).join('')
       + `<span class="res" title="Population">Pop ${p.pop}/${p.popCap}</span><span class="res">${p.ageUp ? 'Advancing... ' : ''}${AGES[ageIndex(p.age)][0].toUpperCase() + p.age.slice(1)} Age</span>`
       + `<span class="grow"><b>${round ? round.name : 'Match'}</b> - <span class="obj">${obj}</span></span><span class="res">${fmtTime(g.time)}</span>`
-      + [1, 2, 4].map(s => `<button data-speed="${s}" class="${ui.speed === s ? 'on' : ''}">${s}x</button>`).join('') + `<button data-pause="1" class="${ui.paused ? 'on' : ''}">${ui.paused ? 'Resume' : 'Pause'}</button>`;
+      + [1, 2, 4].map(s => `<button data-speed="${s}" class="${ui.speed === s ? 'on' : ''}">${s}x</button>`).join('') + `<button data-pause="1" class="${ui.paused ? 'on' : ''}">${ui.paused ? 'Resume' : 'Pause'}</button><button data-resign="1" class="${ui.resignArmed ? 'on' : ''}">${ui.resignArmed ? 'Confirm resign?' : 'Resign'}</button>`;
     if (top._html !== html) { top.innerHTML = html; top._html = html; }
     // info panel
     const sel = [...ui.sel].map(id => g.entities.get(id)).filter(Boolean), one = sel.length === 1 ? sel[0] : null, insp = ui.inspect && g.entities.get(ui.inspect.id);
@@ -65,6 +65,7 @@ export function createHud(ui) {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.speed) ui.setSpeed(+b.dataset.speed);
     else if (b.dataset.pause) ui.togglePause();
+    else if (b.dataset.resign) { if (ui.resignArmed) { ui.resignArmed = false; ui.game.command(0, { type: 'resign' }); } else { ui.resignArmed = true; setTimeout(() => { ui.resignArmed = false; }, 3000); } }
     else if (b.dataset.build) ui.startPlacing(b.dataset.build);
     else if (b.dataset.train) { const n = e.shiftKey ? 5 : 1; for (let i = 0; i < n; i++) { const r = ui.cmd({ type: 'train', buildingId: +b.dataset.b, unit: b.dataset.train }); if (!r.ok) break; } cmdKey = ''; }
     else if (b.dataset.age) { ui.cmd({ type: 'age' }); cmdKey = ''; }
