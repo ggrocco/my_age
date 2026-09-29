@@ -21,7 +21,7 @@ test('every trainable unit has a building; ages have costs', () => {
 });
 test('AI Future age exists with cost and display name', () => {
   assert.deepEqual(AGES, ['stone', 'tool', 'bronze', 'iron', 'future']);
-  assert.ok(AGE_COST.future && AGE_COST.future.time > 0);
+  assert.deepEqual(AGE_COST.future, { cost: { food: 1200, wood: 0, gold: 1200, stone: 300 }, time: 60 });
   assert.equal(AGE_NAME.future, 'AI Future');
   for (const a of AGES) assert.ok(AGE_NAME[a], a);
 });
