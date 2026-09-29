@@ -97,7 +97,7 @@ export function execute(game, pid, cmd) {
       return OK;
     }
     case 'relic': {
-      const us = ownUnits(game, pid, cmd.ids).filter(u => u.type !== 'catapult' && u.relic === null), r = game.relics.get(cmd.relicId);
+      const us = ownUnits(game, pid, cmd.ids).filter(u => u.cls !== 'siege' && u.relic === null), r = game.relics.get(cmd.relicId);
       if (!us.length) return fail('no carriers'); if (!r || r.holder !== null || r.stored !== null) return fail('relic unavailable');
       const u = us[0]; u.order = { type: 'relic', relic: r.id, phase: 'go', fails: 0 }; u.path = null; u.retry = 0;
       return OK;
