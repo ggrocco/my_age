@@ -12,5 +12,5 @@ export const UNITS = {
   scout:        { name: 'Scout', hp: 60, atk: 3, armor: 0, range: 0.9, speed: 3.2, cost: c(100), trainTime: 30, age: 'tool', sight: 10, cls: 'cav' },
   horse_archer: { name: 'Horse Archer', hp: 50, atk: 5, armor: 0, range: 6, speed: 2.8, cost: c(50, 0, 70), trainTime: 34, age: 'bronze', sight: 8, cls: 'cav' },
   catapult:     { name: 'Catapult', hp: 75, atk: 50, armor: 0, range: 9, speed: 0.9, cost: c(0, 150, 75), trainTime: 60, age: 'iron', sight: 8, cls: 'siege', splash: 1.5 },
-  king:         { name: 'King', hp: 120, atk: 5, armor: 2, range: 0.9, speed: 1.4, cost: c(), trainTime: 1, age: 'stone', sight: 6, cls: 'inf', trainable: false },
+  king:         { name: 'King', hp: 120, atk: 5, armor: 2, range: 0.9, speed: 1.4, cost: c(), trainTime: 1, age: 'stone', sight: 6, cls: 'civ', trainable: false },
 };

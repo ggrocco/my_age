@@ -64,6 +64,13 @@ export function execute(game, pid, cmd) {
       for (const u of us) { u.order = { type: 'build', target: b.id, fails: 0 }; u.path = null; u.retry = 0; }
       return OK;
     }
+    case 'construct': {
+      const us = ownUnits(game, pid, cmd.ids).filter(u => u.type === 'villager'), b = game.entities.get(cmd.targetId);
+      if (!us.length) return fail('no villagers');
+      if (!b || b.dead || b.kind !== 'building' || b.owner !== pid || b.constructed) return fail('nothing to build');
+      for (const u of us) { u.order = { type: 'build', target: b.id, fails: 0 }; u.path = null; u.retry = 0; }
+      return OK;
+    }
     case 'train': {
       const b = game.entities.get(cmd.buildingId), def = UNITS[cmd.unit];
       if (!b || b.kind !== 'building' || b.owner !== pid || !b.constructed || !def) return fail('bad building');

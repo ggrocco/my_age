@@ -50,3 +50,12 @@ test('age up requires buildings, cost, and gates units', () => {
   assert.equal(p.age, 'tool');
   assert.equal(g.command(0, { type: 'train', buildingId: b.id, unit: 'axeman' }).ok, true);
 });
+
+test('construct: villagers can help finish an existing foundation', () => {
+  const g = createGame({ seed: 1 }); const vs = mine(g, 0, 'villager'); const sp = freeSpot(g, 0, 'house', []);
+  g.command(0, { type: 'build', ids: [vs[0].id], building: 'house', x: sp.x, y: sp.y });
+  const b = [...g.buildings.values()].find(b => b.type === 'house' && b.owner === 0);
+  assert.equal(g.command(0, { type: 'construct', ids: [vs[1].id, vs[2].id], targetId: b.id }).ok, true);
+  assert.equal(g.command(1, { type: 'construct', ids: [], targetId: b.id }).ok, false, 'enemy cannot');
+  for (let i = 0; i < 300; i++) g.tick(); assert.equal(b.constructed, true, 'three builders finish a house fast');
+});

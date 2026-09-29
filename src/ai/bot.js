@@ -18,6 +18,10 @@ export function createBot(game, pid, difficulty = 'medium') {
   const sweep = [enemyStart, ...[[16, 16], [48, 16], [16, 48], [48, 48], [32, 32], [32, 10], [32, 54], [10, 32], [54, 32]].map(([x, y]) => ({ x, y }))];
   const bot = { saving: false, why: {}, rejects: 0, maxRejects: 0, issued: 0, waveActive: false, sweepIdx: 0, think };
 
+  // In the Wonder round, keep the wonder's cost untouched until it is placed.
+  const reserved = () => (game.rules && game.rules.id === 'wonder' && !mine('buildings').some(b => b.type === 'wonder')) ? BUILDINGS.wonder.cost : null;
+  const canPay = cost => { const r = reserved(); return canAfford(me, r ? Object.fromEntries(['food', 'wood', 'gold', 'stone'].map(k => [k, (cost[k] || 0) + (r[k] || 0)])) : cost); };
+
   function cmd(c) {
     const r = game.command(pid, c); bot.issued++;
     if (r.ok) bot.rejects = 0; else { const k = c.type + ':' + (c.building || c.unit || '') + ':' + r.reason; bot.why[k] = (bot.why[k] || 0) + 1; bot.rejects++; bot.maxRejects = Math.max(bot.maxRejects, bot.rejects); }
@@ -46,7 +50,7 @@ export function createBot(game, pid, difficulty = 'medium') {
   }
   function tryBuild(type, vills, around, nBuilders = 1) {
     const def = BUILDINGS[type];
-    if (ageIndex(def.age) > ageIndex(me.age) || !canAfford(me, def.cost)) return false;
+    if (ageIndex(def.age) > ageIndex(me.age) || !(type === 'wonder' ? canAfford(me, def.cost) : canPay(def.cost))) return false;
     const sp = spotNear(type, around); if (!sp) return false;
     const chosen = [...vills].filter(v => v.order.type !== 'build').sort((a, b) => dist(a, sp) - dist(b, sp)).slice(0, nBuilders);
     if (!chosen.length) return false;
@@ -79,7 +83,7 @@ export function createBot(game, pid, difficulty = 'medium') {
     if (roundId === 'deathmatch' && count('barracks') < 3 && vills.length >= 5) tryBuild('barracks', free, home);
     if (difficulty === 'hard' && vills.length >= 14 && count('barracks') < 2) tryBuild('barracks', free, home);
     bot.saving = false;
-    if (!me.ageUp && vills.length >= Math.min(9, D.villagers * 0.5) && ageIndex(me.age) < AGES.length - 1) {
+    if (!me.ageUp && vills.length >= (roundId === 'wonder' ? 5 : Math.min(9, D.villagers * 0.5)) && ageIndex(me.age) < AGES.length - 1) {
       const why = ageUpProblem(game, pid);
       if (!why) cmd({ type: 'age' }); else if (why === 'resources' && ageIndex(me.age) === 0) bot.saving = true;
     }
@@ -91,7 +95,8 @@ export function createBot(game, pid, difficulty = 'medium') {
     if (roundId === 'wonder' && ageIndex(me.age) >= 2 && count('wonder') < 1 && vills.length >= 8) tryBuild('wonder', free, home, Math.min(10, free.length));
     if (roundId === 'wonder') { // everyone helps build the wonder
       const w = buildings.find(b => b.type === 'wonder' && !b.constructed);
-      if (w) { const helpers = free.filter(v => v.order.type !== 'build').slice(0, 12).map(v => v.id); for (const v of free.slice(0, 12)) if (v.order.type !== 'build') { v.order = { type: 'build', target: w.id, fails: 0 }; v.path = null; } }
+      const helpers = w ? free.filter(v => v.order.type !== 'build').slice(0, 12).map(v => v.id) : [];
+      if (helpers.length) cmd({ type: 'construct', ids: helpers, targetId: w.id });
     }
 
     // --- idle villagers -> resources
@@ -103,7 +108,7 @@ export function createBot(game, pid, difficulty = 'medium') {
     if (!bot.saving && armyCount < D.army && (vills.length >= D.villagers * 0.6 || roundId === 'deathmatch' || roundId === 'wonder')) {
       for (const b of done) {
         const trains = BUILDINGS[b.type].trains || []; if (b.type === 'town_center' || b.queue.length >= 2) continue;
-        const u = bestUnit(trains); if (!u || !canAfford(me, UNITS[u].cost) || me.pop >= me.popCap) continue;
+        const u = bestUnit(trains); if (!u || !canPay(UNITS[u].cost) || me.pop >= me.popCap) continue;
         if (u === 'catapult' && army.filter(a => a.type === 'catapult').length >= 2) continue;
         cmd({ type: 'train', buildingId: b.id, unit: u });
       }
@@ -164,12 +169,13 @@ export function createBot(game, pid, difficulty = 'medium') {
     if (!army.length) return;
     const threats = enemies.filter(e => e.kind === 'unit' && e.cls !== 'civ' && dist(e, home) < 14);
     const idle = army.filter(u => u.order.type === 'idle');
-    // relics: send idle soldiers to fetch loose relics
+    // relics: send the nearest free soldier to each loose relic (idle or mid-wave), one per relic
     if (roundId === 'relics') {
-      const loose = [...game.relics.values()].filter(r => r.holder === null && r.stored === null || (r.holder !== null && game.relicOwner(r) === enemy));
-      for (const r of loose) if (r.holder === null && r.stored === null) {
-        const u = army.filter(a => a.order.type === 'idle' && a.relic === null && a.type !== 'catapult').sort((a, b) => dist(a, r) - dist(b, r))[0];
-        if (u) cmd({ type: 'relic', ids: [u.id], relicId: r.id });
+      const assigned = new Set(army.filter(a => a.order.type === 'relic').map(a => a.order.relic));
+      for (const r of game.relics.values()) {
+        if (r.holder !== null || r.stored !== null || assigned.has(r.id)) continue;
+        const u = army.filter(a => a.relic === null && a.type !== 'catapult' && a.order.type !== 'relic').sort((a, b) => dist(a, r) - dist(b, r))[0];
+        if (u && dist(u, r) < 40) { cmd({ type: 'relic', ids: [u.id], relicId: r.id }); assigned.add(r.id); }
       }
     }
     if (threats.length) {
@@ -178,14 +184,17 @@ export function createBot(game, pid, difficulty = 'medium') {
       return;
     }
     const combat = army.filter(u => u.type !== 'catapult' || true);
-    if (!bot.waveActive && game.time >= D.attackAt && combat.length >= D.wave) bot.waveActive = true;
+    const rush = roundId === 'wonder'; // contest the Wonder while it is being built
+    if (!bot.waveActive && game.time >= (rush ? 3600 : D.attackAt) && combat.length >= (rush ? 5 : D.wave)) bot.waveActive = true;
     if (bot.waveActive && combat.length < 3) bot.waveActive = false;
     if (!bot.waveActive) return;
     const cx = combat.reduce((s, u) => s + u.x, 0) / combat.length, cy = combat.reduce((s, u) => s + u.y, 0) / combat.length, c = { x: cx, y: cy };
     let target = null;
     const king = roundId === 'regicide' ? enemies.find(e => e.type === 'king') : null;
     const wonder = roundId === 'wonder' ? enemies.find(e => e.type === 'wonder') : null;
-    if (king) target = king; else if (wonder) target = wonder;
+    let vault = null;
+    if (roundId === 'relics') { const ids = new Set([...game.relics.values()].filter(r => r.stored !== null && game.relicOwner(r) === enemy).map(r => r.stored)); vault = enemies.find(e => ids.has(e.id)); }
+    if (king) target = king; else if (wonder) target = wonder; else if (vault) target = vault;
     if (!target) target = enemies.filter(e => e.kind === 'unit' && e.cls !== 'civ').sort((a, b) => dist(a, c) - dist(b, c))[0]
       || enemies.filter(e => e.kind === 'building').sort((a, b) => dist(a, c) - dist(b, c))[0]
       || enemies.filter(e => e.kind === 'unit').sort((a, b) => dist(a, c) - dist(b, c))[0];
