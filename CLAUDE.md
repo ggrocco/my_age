@@ -8,7 +8,7 @@ No build step, bundler or linter. Plain ES modules; three.js is resolved by the 
 
 ```
 npm install
-python3 -m http.server 8000                 # then open http://localhost:8000/
+npm start                                   # node serve.js, then open http://localhost:8000/
 npm test                                    # node --test test/*.test.js
 node --test test/econ.test.js               # single test file
 node --test --test-name-pattern="<name>" test/*.test.js   # single test
@@ -37,7 +37,7 @@ Tests cover the sim, rounds, bot and bracket headlessly (Node test runner); the 
 
 How:
 
-1. Start the server with `preview_start` (name `my-age`, defined in `.claude/launch.json`: `python3 -m http.server 8000`). Don't run it via Bash.
+1. Start the server with `preview_start` (name `my-age`, defined in `.claude/launch.json`: `node serve.js 8000`). Don't run it via Bash.
 2. Drive the page with the built-in browser tools (`mcp__Claude_Browser__*`), not the Chrome extension unless asked: `navigate` to `http://localhost:8000/?...`, `computer` screenshot, `read_console_messages` (must be free of errors), `javascript_tool` for state.
 3. Screenshot the actual thing you changed, look at it, and check the console. If nothing on screen changed, suspect a stale module cache and hard-reload before debugging.
 4. In your final message, say what you verified in the browser and what you could not.

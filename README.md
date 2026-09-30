@@ -8,7 +8,7 @@ Capture the Relics. Lose once and you're out.
 
 ```
 npm install
-python3 -m http.server 8000      # then open http://localhost:8000/
+npm start                       # node serve.js, then open http://localhost:8000/
 npm test                         # 49 unit/integration tests
 node test/bot-sim.js 12          # bot-vs-bot termination check, 12 seeds x 5 rounds
 ```
