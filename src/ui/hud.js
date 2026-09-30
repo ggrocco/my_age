@@ -3,18 +3,48 @@ import { BUILDINGS } from '../data/buildings.js';
 import { AGES, AGE_COST, ageIndex, ageLabel } from '../data/ages.js';
 import { canAfford, ageUpProblem } from '../sim/commands.js';
 import { WONDER_TICKS, RELIC_TICKS } from '../rounds/index.js';
+import { icon } from './icons.js';
+import { COLORS, RES, costHtml, tipHtml } from './tips.js';
 
 const REASONS = { resources: 'Not enough resources', 'pop cap': 'Population cap reached - build Houses', age: 'Requires a later Age', placement: 'Cannot build there', 'needs buildings': 'Advancing needs 2 buildings of your current Age',
   'queue full': 'Production queue is full', 'no villagers': 'Select villagers first', 'no units': 'Select units first', 'bad target': 'Invalid target', 'already researching': 'Already advancing', 'needs town center': 'Requires a Town Center' };
 export const reasonText = r => REASONS[r] || r;
-const COLORS = { food: '#e0554d', wood: '#a06a35', gold: '#facc15', stone: '#9ca3af' };
 const fmtTime = t => { const s = Math.floor(t / 20); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
-const costStr = c => ['food', 'wood', 'gold', 'stone'].filter(k => c[k]).map(k => c[k] + k[0].toUpperCase()).join(' ');
+const tintOf = d => !d.cls ? 't-bld' : d.age === 'future' ? 't-fut' : d.cls === 'civ' ? 't-civ' : d.cls === 'siege' ? 't-siege' : 't-mil';
+const shortOf = (p, cost) => RES.filter(k => cost[k] > p.res[k]);
 
 export function createHud(ui) {
   const $ = id => document.getElementById(id), top = $('topbar'), info = $('info'), cmds = $('cmds');
   let cmdKey = '', infoKey = '';
   const hud = { toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(hud._t); hud._t = setTimeout(() => t.classList.remove('show'), 2200); } };
+  // Glass command tile: icon orb + name + cost. Disabled tiles use .off / aria-disabled (not [disabled]) so they still receive hover for the tooltip.
+  // tile() returns a descriptor: `key` (attributes + name + lock) changes only when the tile set, its target building or a lock state changes (then the panel is rebuilt);
+  // otherwise `off` and `small` (cost line) are patched in place so hover/glow animations and focus survive resource ticks.
+  const tips = new Map();
+  const tile = (attrs, { kind, id, name, cost, tint, cls, ok, lockedAge, short = [], notes = [], next, extra = '', cx = '' }) => {
+    tips.set(`${kind}:${id}`, tipHtml({ kind, id, next, short, notes }));
+    const lock = lockedAge ? `<span class="lock">${icon('lock')}</span>` : '', small = lockedAge ? ageLabel(lockedAge) + ' age' : costHtml(cost, short, true) + extra;
+    return { key: `${attrs}|${name}|${lockedAge ? 'L' : ''}`, off: !ok, small,
+      html: `<button class="btn tile ${tint}${ok ? '' : ' off'}${lockedAge ? ' locked' : ''}${cx}" ${attrs} data-tip="${kind}:${id}" aria-describedby="tip" aria-disabled="${!ok}"><span class="orb">${icon(id, cls)}${lock}</span><span class="lbl"><b>${name}</b><small>${small}</small></span></button>` };
+  };
+  const tipEl = $('tip'); let tipKey = '';
+  const hideTip = () => { tipKey = ''; tipEl.classList.remove('show'); };
+  const showTip = (b, force) => {
+    const html = tips.get(b.dataset.tip); if (!html || ui.touch) return hideTip();
+    const was = tipEl.classList.contains('show'); if (!force && was && tipKey === b.dataset.tip) return;
+    tipKey = b.dataset.tip; if (tipEl._html !== html) { tipEl.innerHTML = html; tipEl._html = html; }
+    const tint = [...b.classList].find(c => c.startsWith('t-')); if (tipEl._tint !== tint) { if (tipEl._tint) tipEl.classList.remove(tipEl._tint); tipEl.classList.add(tint); tipEl._tint = tint; }
+    tipEl.classList.toggle('move', was);
+    const r = b.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+    tipEl.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
+    tipEl.style.top = (r.top - h - 10 < 8 ? r.bottom + 10 : r.top - h - 10) + 'px';
+    tipEl.classList.add('show');
+  };
+  document.addEventListener('mouseover', e => { const b = e.target.closest?.('#cmds .tile'); if (b) showTip(b); else if (tipKey) hideTip(); });
+  document.addEventListener('mouseout', e => { if (!e.relatedTarget) hideTip(); });
+  document.addEventListener('focusin', e => { const b = e.target.closest?.('#cmds .tile'); if (b) showTip(b); });
+  document.addEventListener('focusout', hideTip);
+  cmds.addEventListener('scroll', hideTip, { passive: true });
   hud.update = () => {
     const g = ui.game, p = g.players[0], round = g.rules;
     let obj = round ? round.desc : '';
@@ -59,17 +89,22 @@ export function createHud(ui) {
     const own = sel.filter(e => e.owner === 0), vills = own.filter(e => e.type === 'villager'), bld = own.find(e => e.kind === 'building' && e.constructed);
     let key = `${vills.length ? 'V' : ''}${bld ? bld.id + ':' + bld.queue.length : ''}${p.age}${p.ageUp ? 'a' : ''}${['food', 'wood', 'gold', 'stone'].map(k => Math.floor(p.res[k] / 25)).join(',')}${p.pop >= p.popCap ? 'P' : ''}${ui.placing || ''}`;
     if (key !== cmdKey) {
-      cmdKey = key; const btns = [];
+      cmdKey = key; const btns = []; tips.clear();
+      const notesFor = (locked, d, short, popFull) => locked ? ['Requires ' + ageLabel(d.age) + ' Age'] : [...(short.length ? [reasonText('resources')] : []), ...(popFull ? [reasonText('pop cap')] : [])];
       if (vills.length) for (const [id, d] of Object.entries(BUILDINGS)) {
-        const locked = ageIndex(d.age) > ageIndex(p.age), ok = !locked && canAfford(p, d.cost);
-        btns.push(`<button class="btn" data-build="${id}" ${ok ? '' : 'disabled'} title="${locked ? 'Requires ' + ageLabel(d.age) + ' age' : ''}">${d.name}<small>${locked ? ageLabel(d.age) + ' age' : costStr(d.cost)}</small></button>`);
+        const locked = ageIndex(d.age) > ageIndex(p.age), short = shortOf(p, d.cost), ok = !locked && canAfford(p, d.cost);
+        btns.push(tile(`data-build="${id}"`, { kind: 'building', id, name: d.name, cost: d.cost, tint: tintOf(d), ok, lockedAge: locked ? d.age : '', short, notes: notesFor(locked, d, short) }));
       }
       if (bld) {
-        for (const u of BUILDINGS[bld.type].trains || []) { const d = UNITS[u], locked = ageIndex(d.age) > ageIndex(p.age), ok = !locked && canAfford(p, d.cost) && p.pop < p.popCap;
-          btns.push(`<button class="btn" data-train="${u}" data-b="${bld.id}" ${ok ? '' : 'disabled'} title="${locked ? 'Requires ' + ageLabel(d.age) + ' age' : ''}">${d.name}<small>${locked ? ageLabel(d.age) + ' age' : costStr(d.cost)}</small></button>`); }
-        if (bld.type === 'town_center') { const next = AGES[ageIndex(p.age) + 1]; if (next) { const why = ageUpProblem(ui.game, 0); btns.push(`<button class="btn age" data-age="1" ${why ? 'disabled' : ''} title="${why || ''}">Advance: ${ageLabel(next)}<small>${costStr(AGE_COST[next].cost)}${why === 'needs buildings' ? ' + 2 bldgs' : ''}</small></button>`); } }
+        for (const u of BUILDINGS[bld.type].trains || []) { const d = UNITS[u], locked = ageIndex(d.age) > ageIndex(p.age), short = shortOf(p, d.cost), popFull = p.pop >= p.popCap, ok = !locked && canAfford(p, d.cost) && !popFull;
+          btns.push(tile(`data-train="${u}" data-b="${bld.id}"`, { kind: 'unit', id: u, name: d.name, cost: d.cost, tint: tintOf(d), cls: d.cls, ok, lockedAge: locked ? d.age : '', short, notes: notesFor(locked, d, short, popFull) })); }
+        if (bld.type === 'town_center') { const next = AGES[ageIndex(p.age) + 1]; if (next) { const why = ageUpProblem(ui.game, 0), cost = AGE_COST[next].cost;
+          btns.push(tile('data-age="1"', { kind: 'age', id: 'age', next, name: 'Advance: ' + ageLabel(next), cost, tint: 't-age', ok: !why, short: shortOf(p, cost), notes: why ? [reasonText(why)] : [], extra: why === 'needs buildings' ? '<span class="c">+2 bldgs</span>' : '', cx: ' age' })); } }
       }
-      cmds.innerHTML = btns.join('');
+      const struct = btns.map(b => b.key).join('|');
+      if (struct !== cmds._struct) { cmds.innerHTML = btns.map(b => b.html).join(''); cmds._struct = struct; }
+      else btns.forEach((b, i) => { const el = cmds.children[i], sm = el.querySelector('small'); el.classList.toggle('off', b.off); el.setAttribute('aria-disabled', b.off); if (sm.innerHTML !== b.small) sm.innerHTML = b.small; });
+      if (tipKey) { const nb = cmds.querySelector(`[data-tip="${tipKey}"]`); if (nb) showTip(nb, true); else hideTip(); }
     }
     document.body.classList.toggle('has-cmds', cmds.children.length > 0);
   };
@@ -80,7 +115,7 @@ export function createHud(ui) {
   };
   hud.closeMenu = () => { const m = $('gamemenu'); if (m.classList.contains('hidden')) return; m.classList.add('hidden'); ui.paused = !!ui._wasPaused; };
   document.addEventListener('click', e => {
-    const b = e.target.closest('button'); if (!b) return;
+    const b = e.target.closest('button'); if (!b || b.classList.contains('off')) return;
     if (b.dataset.menu === 'open') return hud.openMenu();
     if (b.dataset.menu === 'close') return hud.closeMenu();
     if (b.dataset.act) return ui.actions?.[b.dataset.act]?.();
