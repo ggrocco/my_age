@@ -2,6 +2,7 @@
 import { UNITS } from '../data/units.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { AGES, ageIndex } from '../data/ages.js';
+import { TECHS } from '../data/techs.js';
 import { canPlace, canAfford, ageUpProblem } from '../sim/commands.js';
 import { RES_KIND, centerOf, distPoint } from '../sim/util.js';
 
@@ -97,6 +98,19 @@ export function createBot(game, pid, difficulty = 'medium') {
       if (count('stable') < 1) tryBuild('stable', free, home);
     }
     if (ageIndex(me.age) >= 2 && count('government_center') < 1 && roundId !== 'wonder') tryBuild('government_center', free, home);
+
+    // --- research upgrades (economy first, then military; canPay respects wonder reservation)
+    if (!bot.saving) for (const b of done) {
+      if (b.research) continue;
+      for (const id of RESEARCH_PREF) {
+        const t = TECHS[id];
+        if (t.building !== b.type || me.techs.has(id) || ageIndex(me.age) < ageIndex(t.age)) continue;
+        if (t.requires && !me.techs.has(t.requires)) continue;
+        if (done.some(bb => bb.research && bb.research.tech === id)) continue; // another building already on it
+        if (!canPay(t.cost)) continue;
+        if (cmd({ type: 'research', buildingId: b.id, tech: id })) break;
+      }
+    }
     if (roundId === 'wonder' && ageIndex(me.age) >= 2 && count('wonder') < 1 && vills.length >= 8) tryBuild('wonder', free, home, Math.min(10, free.length));
     if (roundId === 'wonder') { // everyone helps build the wonder
       const w = buildings.find(b => b.type === 'wonder' && !b.constructed);
@@ -111,10 +125,11 @@ export function createBot(game, pid, difficulty = 'medium') {
     // --- military production
     const armyCap = roundId === 'deathmatch' ? 44 : D.army;
     const armyCount = army.length + done.reduce((n, b) => n + b.queue.filter(q => UNITS[q.unit].cls !== 'civ').length, 0);
+    const enemyClass = dominantEnemyClass(enemies); // counter-pick against what we can see
     if (!bot.saving && armyCount < armyCap && (vills.length >= D.villagers * 0.6 || roundId === 'deathmatch' || roundId === 'wonder')) {
       for (const b of done) {
         const trains = BUILDINGS[b.type].trains || []; if (b.type === 'town_center' || b.queue.length >= (roundId === 'deathmatch' ? 4 : 2)) continue;
-        const u = bestUnit(trains); if (!u || !canPay(UNITS[u].cost) || me.pop >= me.popCap) continue;
+        const u = bestUnit(trains, enemyClass); if (!u || !canPay(UNITS[u].cost) || me.pop >= me.popCap) continue;
         if (UNITS[u].cls === 'siege' && army.filter(a => a.cls === 'siege').length + done.reduce((n, x) => n + x.queue.filter(q => UNITS[q.unit].cls === 'siege').length, 0) >= 2) continue;
         cmd({ type: 'train', buildingId: b.id, unit: u });
       }
@@ -125,8 +140,26 @@ export function createBot(game, pid, difficulty = 'medium') {
   }
 
   const SIEGE = ['railgun', 'catapult'];
-  function bestUnit(trains) {
-    const pref = ['mech', 'railgun', 'swordsman', 'hoplite', 'catapult', 'drone', 'horse_archer', 'axeman', 'bowman', 'spearman', 'clubman', 'slinger'];
+  const RESEARCH_PREF = ['woodworking', 'gold_mining', 'bronze_weapons', 'bronze_shields', 'iron_weapons', 'ballistics'];
+  // Counter-pick preference lists (openage damage.md classes). Same 12 units, reordered:
+  // vs archers -> tanky melee / pierce-armoured closers; vs cavalry -> spearman (bonus) first;
+  // vs infantry -> pierce archers (infantry has no pierce armour); vs siege -> fast closers.
+  const PREF = {
+    default: ['mech', 'railgun', 'swordsman', 'hoplite', 'catapult', 'drone', 'horse_archer', 'axeman', 'bowman', 'spearman', 'clubman', 'slinger'],
+    archer:  ['mech', 'railgun', 'catapult', 'swordsman', 'hoplite', 'horse_archer', 'drone', 'axeman', 'spearman', 'clubman', 'bowman', 'slinger'],
+    cav:     ['mech', 'railgun', 'catapult', 'spearman', 'swordsman', 'hoplite', 'drone', 'bowman', 'horse_archer', 'axeman', 'clubman', 'slinger'],
+    inf:     ['mech', 'railgun', 'catapult', 'drone', 'bowman', 'horse_archer', 'slinger', 'hoplite', 'swordsman', 'axeman', 'spearman', 'clubman'],
+    siege:   ['mech', 'railgun', 'catapult', 'horse_archer', 'drone', 'hoplite', 'swordsman', 'axeman', 'bowman', 'spearman', 'clubman', 'slinger'],
+  };
+  function dominantEnemyClass(enemies) {
+    const n = {};
+    for (const e of enemies) if (e.kind === 'unit' && e.cls && e.cls !== 'civ') n[e.cls] = (n[e.cls] || 0) + 1;
+    let best = null, bn = 0;
+    for (const k in n) if (n[k] > bn) { bn = n[k]; best = k; }
+    return best;
+  }
+  function bestUnit(trains, enemyClass) {
+    const pref = PREF[enemyClass] || PREF.default;
     const known = pref.filter(u => trains.includes(u) && ageIndex(UNITS[u].age) <= ageIndex(me.age));
     if (!known.length) return null;
     const affordable = known.filter(u => canPay(UNITS[u].cost)); // prefer the best unit we can actually pay for right now

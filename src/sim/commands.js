@@ -1,5 +1,6 @@
 import { UNITS } from '../data/units.js';
 import { BUILDINGS } from '../data/buildings.js';
+import { TECHS } from '../data/techs.js';
 import { AGES, AGE_COST, ageIndex } from '../data/ages.js';
 import { secs, RES_KIND } from './util.js';
 
@@ -82,6 +83,19 @@ export function execute(game, pid, cmd) {
       if (p.pop >= p.popCap) return fail('pop cap');
       if (!canAfford(p, def.cost)) return fail('resources');
       pay(p, def.cost); b.queue.push({ unit: cmd.unit, remaining: secs(def.trainTime) }); p.pop++;
+      return OK;
+    }
+    case 'research': {
+      const b = game.entities.get(cmd.buildingId), t = TECHS[cmd.tech];
+      if (!b || b.kind !== 'building' || b.owner !== pid || !b.constructed || !t) return fail('bad building');
+      if (t.building !== b.type) return fail('wrong building');
+      if (ageIndex(p.age) < ageIndex(t.age)) return fail('age');
+      if (p.techs.has(cmd.tech)) return fail('already researched');
+      if (t.requires && !p.techs.has(t.requires)) return fail('requires');
+      if (b.research) return fail('busy');
+      for (const bb of game.buildings.values()) if (bb.owner === pid && bb.research && bb.research.tech === cmd.tech) return fail('already researching');
+      if (!canAfford(p, t.cost)) return fail('resources');
+      pay(p, t.cost); b.research = { tech: cmd.tech, remaining: secs(t.time) };
       return OK;
     }
     case 'age': {

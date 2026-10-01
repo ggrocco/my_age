@@ -1,6 +1,7 @@
 // Hover descriptions and cost chips for the command tiles. DOM-free (returns HTML strings) so it is unit-testable.
 import { UNITS } from '../data/units.js';
 import { BUILDINGS } from '../data/buildings.js';
+import { TECHS } from '../data/techs.js';
 import { AGES, AGE_COST, ageLabel } from '../data/ages.js';
 import { WONDER_TICKS } from '../rounds/index.js';
 import { icon } from './icons.js';
@@ -14,24 +15,24 @@ export const DESC = {
   town_center: 'Your base. Trains Villagers, accepts every resource and is where you advance to the next Age.',
   house: 'Raises your population cap. Build more when training stalls at the cap.',
   granary: 'Drop-off point for food. Place it beside berries and farms to shorten trips.',
-  storage_pit: 'Drop-off point for wood, gold and stone. Place it beside forests and mines.',
+  storage_pit: 'Drop-off point for wood, gold and stone. Also researches weapon and armor upgrades.',
   farm: 'A field that holds 400 food. Villagers work it for a steady food supply.',
   barracks: 'Trains infantry and Slingers. The Future Age adds the Mech Walker.',
   archery_range: 'Trains ranged units: Bowmen, then Combat Drones in the Future Age.',
   stable: 'Trains fast cavalry: Scouts for exploring and Horse Archers for raids.',
-  market: 'Counts as one of the 2 buildings needed to leave the Tool Age. Trading is not in the game yet.',
-  government_center: 'Trains siege: Catapults and Railguns. Also a drop-off point for every resource.',
+  market: 'Researches economy upgrades that speed up gathering, and counts toward leaving the Tool Age.',
+  government_center: 'Trains siege: Catapults and Railguns, researches Ballistics (+range), and accepts every resource.',
   wonder: `In the Wonder Race, keeping one standing for ${Math.round(WONDER_TICKS / 1200)} minutes wins the round.`,
   villager: 'Gathers food, wood, gold and stone and builds every structure. Weak in a fight.',
   clubman: 'Cheap melee infantry that fights well early and falls behind in later Ages.',
   axeman: 'Melee infantry with a heavier swing than the Clubman.',
-  slinger: 'Cheap ranged unit that throws stones from a distance. Costs a little stone.',
-  bowman: 'Ranged unit with a longer reach than the Slinger. Keep soldiers in front of it.',
-  spearman: 'Sturdy melee infantry with a little armor. A good front line in the Tool Age.',
-  hoplite: 'Heavily armored infantry that soaks up damage for the units behind it.',
-  swordsman: 'The strongest infantry before the Future Age: high health, high damage, good armor.',
-  scout: 'Fast cavalry with the widest sight. Explore the map and pick off stray Villagers.',
-  horse_archer: 'Fast ranged cavalry. Strike from a distance and retreat before the enemy closes in.',
+  slinger: 'Cheap pierce skirmisher that throws stones from a distance. Costs a little stone.',
+  bowman: 'Pierce ranged unit that shreds unarmoured infantry. Bounces off buildings and pierce-armoured foes; keep soldiers in front of it.',
+  spearman: 'Sturdy melee infantry with bonus damage against cavalry. A good front line in the Tool Age.',
+  hoplite: 'Heavy melee armour (5) soaks up melee hits, but arrows still get through. Hits very hard.',
+  swordsman: 'The toughest infantry before the Future Age: huge health and solid melee armour.',
+  scout: 'Fast cavalry with wide sight and bonus damage against infantry. Explore and pick off stray Villagers.',
+  horse_archer: 'Fast pierce cavalry with 2 pierce armour, so it beats other archers. Strike and retreat.',
   catapult: 'Slow siege engine. Its shots also hurt nearby units, but it is fragile up close.',
   drone: 'Fast Future Age skirmisher that fires from long range.',
   mech: 'Future Age walker with 200 health and heavy armor. Slow, tough and hard-hitting.',
@@ -53,7 +54,9 @@ export function tipHtml({ kind, id, next, short = [], notes = [] }) {
   let title, sub, cost, stats = '', desc = DESC[id], ic = id, cls;
   if (kind === 'unit') {
     const u = UNITS[id]; cls = u.cls; title = u.name; sub = `${CLASS_LABEL[u.cls]} unit, ${ageLabel(u.age)} Age`; cost = u.cost;
-    stats = row('HP', u.hp) + row('Attack', u.atk) + row('Armor', u.armor) + row('Range', u.range <= 1 ? 'Melee' : `${u.range} tiles`) + row('Speed', `${u.speed} tiles/s`) + row('Trains in', `${u.trainTime}s`);
+    const atkLabel = `${u.atk} ${u.atkType === 'pierce' ? 'pierce' : 'melee'}`;
+    stats = row('HP', u.hp) + row('Attack', atkLabel) + row('Armor', `${u.marmor} melee / ${u.parmor} pierce`) + row('Range', u.range <= 1 ? 'Melee' : `${u.range} tiles`) + row('Speed', `${u.speed} tiles/s`) + row('Trains in', `${u.trainTime}s`);
+    if (u.bonus) stats += row('Bonus', Object.entries(u.bonus).map(([k, v]) => `+${v} vs ${CLASS_LABEL[k] || k}`).join(', '), true);
   } else if (kind === 'building') {
     const b = BUILDINGS[id]; title = b.name; sub = `Building, ${ageLabel(b.age)} Age`; cost = b.cost;
     stats = row('HP', b.hp) + row('Build time', `${b.buildTime}s`);
@@ -61,6 +64,10 @@ export function tipHtml({ kind, id, next, short = [], notes = [] }) {
     if (b.pop) stats += row('Adds', `+${b.pop} population`, true);
     if (b.drops) stats += row('Drop-off', b.drops.map(cap).join(', '), true);
     if (b.gatherType) stats += row('Holds', `${b.amount} ${b.gatherType}`, true);
+  } else if (kind === 'tech') {
+    const t = TECHS[id]; title = t.name; sub = `Research, ${ageLabel(t.age)} Age`; cost = t.cost; desc = t.desc;
+    stats = row('Research time', `${t.time}s`, true);
+    if (t.requires) stats += row('Requires', TECHS[t.requires].name, true);
   } else {
     const a = AGE_COST[next]; title = `Advance to ${ageLabel(next)} Age`; sub = `Takes ${a.time}s`; cost = a.cost; ic = 'age';
     // Mirrors ageUpProblem (src/sim/commands.js): a Town Center plus min(2, buildings of the current Age, excluding extras like the Farm).
