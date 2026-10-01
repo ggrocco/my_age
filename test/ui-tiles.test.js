@@ -1,6 +1,7 @@
 import test from 'node:test'; import assert from 'node:assert/strict';
 import { UNITS } from '../src/data/units.js';
 import { BUILDINGS } from '../src/data/buildings.js';
+import { TECHS } from '../src/data/techs.js';
 import { AGES } from '../src/data/ages.js';
 import { ICONS, icon } from '../src/ui/icons.js';
 import { DESC, costHtml, tipHtml } from '../src/ui/tips.js';
@@ -32,7 +33,7 @@ test('costHtml skips zero costs, shortens thousands and flags shortfalls', () =>
 });
 test('unit tip: name, description, stats, cost and notes', () => {
   const h = tipHtml({ kind: 'unit', id: 'catapult', short: ['gold'], notes: ['Requires Iron Age'] });
-  for (const s of ['Catapult', DESC.catapult, 'HP', '75', 'Attack', '50', 'Range', '9', 'Requires Iron Age', 'short']) assert.ok(h.includes(s), s);
+  for (const s of ['Catapult', DESC.catapult, 'HP', '75', 'Attack', '60', 'Range', '9', 'Requires Iron Age', 'short']) assert.ok(h.includes(s), s);
   assert.match(tipHtml({ kind: 'unit', id: 'clubman' }), /Melee/);
 });
 test('building tip lists what it trains and the build time', () => {
@@ -51,8 +52,13 @@ test('age tip states the same building requirement as ageUpProblem', () => {
   assert.doesNotMatch(tipHtml({ kind: 'age', id: 'age', next: 'future' }), /finished building/);
   for (const a of ['tool', 'bronze', 'iron']) { assert.equal(need(a), 2, a); assert.match(tipHtml({ kind: 'age', id: 'age', next: a }), /2 finished buildings/, a); }
 });
+test('tech tip: name, description, cost, research time and prerequisite', () => {
+  const h = tipHtml({ kind: 'tech', id: 'iron_weapons', short: ['gold'], notes: ['Needs Bronze Weapons'] });
+  for (const s of ['Iron Weapons', TECHS.iron_weapons.desc, 'Research time', `${TECHS.iron_weapons.time}s`, 'Requires', 'Bronze Weapons', 'Needs Bronze Weapons']) assert.ok(h.includes(s), s);
+});
 test('every tip renders without throwing and never leaks "undefined"', () => {
   for (const id of Object.keys(UNITS)) assert.doesNotMatch(tipHtml({ kind: 'unit', id }), /undefined|NaN/, id);
   for (const id of Object.keys(BUILDINGS)) assert.doesNotMatch(tipHtml({ kind: 'building', id }), /undefined|NaN/, id);
+  for (const id of Object.keys(TECHS)) assert.doesNotMatch(tipHtml({ kind: 'tech', id }), /undefined|NaN/, id);
   for (const a of AGES.slice(1)) assert.doesNotMatch(tipHtml({ kind: 'age', id: 'age', next: a }), /undefined|NaN/, a);
 });

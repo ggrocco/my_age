@@ -75,7 +75,7 @@ function doGather(game, u, o) {
     const r = travel(game, u, goalNear(res, 0.95), centerOf(res));
     if (r === 'fail') { if (++o.fails > 3) stop(u); else o.res = -1; }
   } else if (o.phase === 'work') {
-    const rate = RATE[kind] * DT;
+    const rate = RATE[kind] * DT * game.players[u.owner].gatherMult[kind];
     if (u.carry.type !== kind) u.carry = { type: kind, amount: 0 };
     const take = Math.min(rate, res.amount); res.amount -= take; u.carry.amount += take; game.players[u.owner].gathered += take;
     if (res.amount <= 0) game.depleted(res);
@@ -106,15 +106,23 @@ function doBuild(game, u, o) {
   if (r === 'fail') { o.fails = (o.fails || 0) + 1; if (o.fails > 3) stop(u); }
 }
 
+// AoE1 damage model (openage doc/reverse_engineering/game_mechanics/damage.md):
+// subtract the armor matching the attacker's attack type, add any bonus-vs-class,
+// clamp each term, floor at 1. Buildings carry melee/pierce armor (no cls), so the
+// bonus never applies to them; archers (pierce) bounce off their high pierce armor.
+export function damageTo(u, t) {
+  const armor = u.atkType === 'pierce' ? (t.parmor || 0) : (t.marmor || 0);
+  const bonus = (u.bonus && t.cls && u.bonus[t.cls]) || 0;
+  return Math.max(1, Math.max(0, u.atk - armor) + bonus);
+}
+
 export function hit(game, u, t) {
-  let dmg = Math.max(1, u.atk - (t.armor || 0));
-  if (t.kind === 'building' && u.cls !== 'siege') dmg *= 0.5;
-  game.damage(t, dmg, u);
+  game.damage(t, damageTo(u, t), u);
   if (u.splash) {
     const c = centerOf(t);
     for (const list of [game.units, game.buildings]) for (const e of [...list.values()]) {
       if (e === t || e.dead || e.owner === u.owner) continue;
-      if (distPoint(c.x, c.y, e) <= u.splash) game.damage(e, dmg * 0.5, u);
+      if (distPoint(c.x, c.y, e) <= u.splash) game.damage(e, damageTo(u, e) * 0.5, u);
     }
   }
 }

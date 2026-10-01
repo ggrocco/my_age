@@ -1,6 +1,6 @@
 import test from 'node:test'; import assert from 'node:assert/strict';
 import { createGame } from '../src/sim/game.js';
-import { ROUNDS, roundById } from '../src/rounds/index.js';
+import { ROUNDS, roundById, scoreOf } from '../src/rounds/index.js';
 const G = id => createGame({ seed: 2, rules: roundById(id) });
 const wipe = (g, p) => { for (const e of [...g.units.values(), ...g.buildings.values()]) if (e.owner === p) g.remove(e); };
 test('conquest ends when a side is wiped out', () => {
@@ -31,4 +31,27 @@ test('relics: hold all 5 for 3 minutes wins; losing one resets', () => {
 });
 test('every round returns a winner at the cap', () => {
   for (const r of ROUNDS) { const g = createGame({ seed: 3, rules: r }); g.time = r.capTicks - 1; g.tick(); assert.ok(g.result && [0, 1].includes(g.result.winner), r.id); }
+});
+test('scoreOf military term counts kills and generalship (kills - losses)', () => {
+  const g = G('conquest'); const base = scoreOf(g, 0);
+  g.players[0].kills += 4; g.players[0].losses += 1; // +4 kills, generalship max(0,4-1)=+3
+  assert.equal(scoreOf(g, 0), base + 7);
+});
+test('scoreOf technology term adds 2 per researched tech', () => {
+  const g = G('conquest'); g.players[0].age = 'tool'; const base = scoreOf(g, 0);
+  g.completeTech(0, 'bronze_weapons');
+  assert.equal(scoreOf(g, 0), base + 2);
+});
+test('scoreOf religion term: 10 per held relic, +50 for all', () => {
+  const g = G('relics'); const tc = [...g.buildings.values()].find(b => b.owner === 0);
+  const base = scoreOf(g, 0), relics = [...g.relics.values()];
+  relics[0].stored = tc.id; assert.equal(scoreOf(g, 0), base + 10);
+  for (const r of relics) r.stored = tc.id; assert.equal(scoreOf(g, 0), base + relics.length * 10 + 50);
+});
+test('scoreOf rewards a standing Wonder; cap tiebreak picks the higher score', () => {
+  const g = G('conquest'); const base = scoreOf(g, 0);
+  g.addBuilding('wonder', 0, 30, 30, true); // +100 wonder, +2 as a standing building
+  assert.equal(scoreOf(g, 0), base + 102);
+  const g2 = G('conquest'); g2.players[0].kills += 100; g2.time = g2.rules.capTicks - 1; g2.tick();
+  assert.deepEqual([g2.result.winner, g2.result.reason], [0, 'time cap']);
 });
