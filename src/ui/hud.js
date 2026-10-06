@@ -1,5 +1,6 @@
 import { UNITS } from '../data/units.js';
 import { BUILDINGS } from '../data/buildings.js';
+import { TECHS } from '../data/techs.js';
 import { AGES, AGE_COST, ageIndex, ageLabel } from '../data/ages.js';
 import { canAfford, ageUpProblem } from '../sim/commands.js';
 import { WONDER_TICKS, RELIC_TICKS } from '../rounds/index.js';
@@ -75,7 +76,7 @@ export function createHud(ui) {
     const nameOf = e => e.kind === 'unit' ? UNITS[e.type].name : e.kind === 'building' ? BUILDINGS[e.type].name : e.type;
     const describe = e => {
       let s = `<h3>${nameOf(e)}${e.owner === 1 ? ' <small class="lose">(enemy)</small>' : ''}</h3>` + bar(e) + `HP ${Math.ceil(e.hp)}/${e.maxHp}`;
-      if (e.kind === 'unit') s += ` &nbsp; Attack ${e.atk} &nbsp; Armor ${e.armor}` + (e.carry?.amount > 0 ? `<br>Carrying ${Math.floor(e.carry.amount)} ${e.carry.type}` : '') + `<br>${e.order.type === 'idle' ? 'Idle' : e.order.type[0].toUpperCase() + e.order.type.slice(1)}`;
+      if (e.kind === 'unit') s += ` &nbsp; Attack ${e.atk} ${e.atkType === 'pierce' ? 'pierce' : 'melee'} &nbsp; Armor ${e.marmor}/${e.parmor}` + (e.carry?.amount > 0 ? `<br>Carrying ${Math.floor(e.carry.amount)} ${e.carry.type}` : '') + `<br>${e.order.type === 'idle' ? 'Idle' : e.order.type[0].toUpperCase() + e.order.type.slice(1)}`;
       if (e.kind === 'building') s += e.constructed ? (e.queue.length ? `<br>Training: ${e.queue.map(q => UNITS[q.unit].name).join(', ')} (${Math.ceil(e.queue[0].remaining / 20)}s)` : (e.gatherType ? `<br>Food left ${Math.floor(e.amount)}` : '')) : `<br>Under construction ${Math.floor(e.progress * 100)}%`;
       return s;
     };
@@ -87,7 +88,7 @@ export function createHud(ui) {
     if (ih !== infoKey) { info.innerHTML = ih; infoKey = ih; }
     // commands
     const own = sel.filter(e => e.owner === 0), vills = own.filter(e => e.type === 'villager'), bld = own.find(e => e.kind === 'building' && e.constructed);
-    let key = `${vills.length ? 'V' : ''}${bld ? bld.id + ':' + bld.queue.length : ''}${p.age}${p.ageUp ? 'a' : ''}${['food', 'wood', 'gold', 'stone'].map(k => Math.floor(p.res[k] / 25)).join(',')}${p.pop >= p.popCap ? 'P' : ''}${ui.placing || ''}`;
+    let key = `${vills.length ? 'V' : ''}${bld ? bld.id + ':' + bld.queue.length : ''}${bld && bld.research ? 'R' + Math.ceil(bld.research.remaining / 20) : ''}${p.techs.size}${p.age}${p.ageUp ? 'a' : ''}${['food', 'wood', 'gold', 'stone'].map(k => Math.floor(p.res[k] / 25)).join(',')}${p.pop >= p.popCap ? 'P' : ''}${ui.placing || ''}`;
     if (key !== cmdKey) {
       cmdKey = key; const btns = []; tips.clear();
       const notesFor = (locked, d, short, popFull) => locked ? ['Requires ' + ageLabel(d.age) + ' Age'] : [...(short.length ? [reasonText('resources')] : []), ...(popFull ? [reasonText('pop cap')] : [])];
@@ -98,6 +99,12 @@ export function createHud(ui) {
       if (bld) {
         for (const u of BUILDINGS[bld.type].trains || []) { const d = UNITS[u], locked = ageIndex(d.age) > ageIndex(p.age), short = shortOf(p, d.cost), popFull = p.pop >= p.popCap, ok = !locked && canAfford(p, d.cost) && !popFull;
           btns.push(tile(`data-train="${u}" data-b="${bld.id}"`, { kind: 'unit', id: u, name: d.name, cost: d.cost, tint: tintOf(d), cls: d.cls, ok, lockedAge: locked ? d.age : '', short, notes: notesFor(locked, d, short, popFull) })); }
+        for (const [id, t] of Object.entries(TECHS)) { // research upgrades for this building type
+          if (t.building !== bld.type || p.techs.has(id)) continue;
+          const inProg = bld.research?.tech === id, locked = ageIndex(p.age) < ageIndex(t.age), needReq = t.requires && !p.techs.has(t.requires);
+          const short = shortOf(p, t.cost), busy = bld.research && !inProg, ok = !inProg && !locked && !needReq && !busy && canAfford(p, t.cost);
+          const notes = inProg ? [`Researching (${Math.ceil(bld.research.remaining / 20)}s)`] : locked ? ['Requires ' + ageLabel(t.age) + ' Age'] : needReq ? ['Needs ' + TECHS[t.requires].name] : busy ? ['Building is busy'] : short.length ? [reasonText('resources')] : [];
+          btns.push(tile(`data-research="${id}" data-b="${bld.id}"`, { kind: 'tech', id, name: t.name, cost: t.cost, tint: 't-age', ok, lockedAge: locked ? t.age : '', short, notes })); }
         if (bld.type === 'town_center') { const next = AGES[ageIndex(p.age) + 1]; if (next) { const why = ageUpProblem(ui.game, 0), cost = AGE_COST[next].cost;
           btns.push(tile('data-age="1"', { kind: 'age', id: 'age', next, name: 'Advance: ' + ageLabel(next), cost, tint: 't-age', ok: !why, short: shortOf(p, cost), notes: why ? [reasonText(why)] : [], extra: why === 'needs buildings' ? '<span class="c">+2 bldgs</span>' : '', cx: ' age' })); } }
       }
@@ -125,6 +132,7 @@ export function createHud(ui) {
     else if (b.dataset.resign) { if (ui.resignArmed) { ui.resignArmed = false; ui.game.command(0, { type: 'resign' }); hud.closeMenu(); } else { ui.resignArmed = true; setTimeout(() => { ui.resignArmed = false; }, 3000); if (!$('gamemenu').classList.contains('hidden')) hud.openMenu(); } }
     else if (b.dataset.build) ui.startPlacing(b.dataset.build);
     else if (b.dataset.train) { const n = e.shiftKey ? 5 : 1; for (let i = 0; i < n; i++) { const r = ui.cmd({ type: 'train', buildingId: +b.dataset.b, unit: b.dataset.train }); if (!r.ok) break; } cmdKey = ''; }
+    else if (b.dataset.research) { ui.cmd({ type: 'research', buildingId: +b.dataset.b, tech: b.dataset.research }); cmdKey = ''; }
     else if (b.dataset.age) { ui.cmd({ type: 'age' }); cmdKey = ''; }
   });
   return hud;

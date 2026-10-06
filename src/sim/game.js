@@ -2,6 +2,7 @@ import { generateMap } from './map.js';
 import { UNITS } from '../data/units.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { AGES } from '../data/ages.js';
+import { TECHS, applyUnitEffect } from '../data/techs.js';
 import { updateUnit } from './orders.js';
 import { execute } from './commands.js';
 import { updateVision } from './vision.js';
@@ -13,7 +14,8 @@ export function createGame({ seed = 1, rules = null, size = 64 } = {}) {
     seed, map, rules, time: 0, result: null, nextId: 1,
     entities: new Map(), units: new Map(), buildings: new Map(), resources: new Map(), relics: new Map(),
     players: [0, 1].map(id => ({ id, res: { food: 200, wood: 200, gold: 100, stone: 100 }, age: 'stone', ageUp: null,
-      explored: new Uint8Array(n * n), visible: new Uint8Array(n * n), kills: 0, bdestroyed: 0, gathered: 0, pop: 0, popCap: 0, defeated: false })),
+      explored: new Uint8Array(n * n), visible: new Uint8Array(n * n), kills: 0, losses: 0, bdestroyed: 0, gathered: 0, pop: 0, popCap: 0, defeated: false,
+      techs: new Set(), gatherMult: { food: 1, wood: 1, gold: 1, stone: 1 } })),
     occAt: (x, y) => (x < 0 || y < 0 || x >= n || y >= n) ? 1 : occ[y * n + x],
     blocked: (x, y) => occ[y * n + x] !== 0,
   };
@@ -23,17 +25,24 @@ export function createGame({ seed = 1, rules = null, size = 64 } = {}) {
   game.addBuilding = (type, owner, x, y, constructed) => {
     const d = BUILDINGS[type];
     const e = { id: game.nextId++, kind: 'building', type, owner, x, y, size: d.size, maxHp: d.hp, hp: constructed ? d.hp : 1, constructed, progress: constructed ? 1 : 0,
-      queue: [], workers: 0, sight: d.sight, armor: 0, dead: false, gatherType: d.gatherType || null, amount: d.amount || 0 };
+      queue: [], workers: 0, sight: d.sight, marmor: d.marmor ?? 3, parmor: d.parmor ?? 8, dead: false, gatherType: d.gatherType || null, amount: d.amount || 0 };
     game.entities.set(e.id, e); game.buildings.set(e.id, e); mark(e, e.id);
     for (const u of game.units.values()) if (u.x >= x && u.x <= x + e.size && u.y >= y && u.y <= y + e.size) { const sp = game.findSpawn(e); u.x = sp.x; u.y = sp.y; u.path = null; }
     return e;
   };
   game.spawnUnit = (type, owner, x, y) => {
     const d = UNITS[type];
-    const u = { id: game.nextId++, kind: 'unit', type, owner, x, y, hp: d.hp, maxHp: d.hp, atk: d.atk, armor: d.armor, range: d.range, speed: d.speed, sight: d.sight,
+    const u = { id: game.nextId++, kind: 'unit', type, owner, x, y, hp: d.hp, maxHp: d.hp, atk: d.atk, atkType: d.atkType || 'melee', marmor: d.marmor || 0, parmor: d.parmor || 0, bonus: d.bonus || null, range: d.range, speed: d.speed, sight: d.sight,
       cls: d.cls, splash: d.splash || 0, cooldown: d.cls === 'archer' ? 40 : d.cls === 'siege' ? 80 : 30, cd: 0, order: { type: 'idle' }, path: null, retry: 0,
       carry: { type: null, amount: 0 }, relic: null, dead: false };
+    for (const id of game.players[owner].techs) applyUnitEffect(u, TECHS[id].effect); // inherit researched upgrades
     game.entities.set(u.id, u); game.units.set(u.id, u); return u;
+  };
+  game.completeTech = (pid, id) => {
+    const p = game.players[pid]; if (p.techs.has(id)) return; p.techs.add(id);
+    const eff = TECHS[id].effect;
+    if (eff.gather) { for (const k in eff.gather) p.gatherMult[k] *= eff.gather[k]; }
+    else for (const u of game.units.values()) if (u.owner === pid) applyUnitEffect(u, eff); // upgrade existing units too
   };
   game.spawnRelic = (x, y) => { const r = { id: game.nextId++, kind: 'relic', x, y, holder: null, stored: null, dead: false }; game.entities.set(r.id, r); game.relics.set(r.id, r); return r; };
   game.relicOwner = r => r.holder !== null ? game.entities.get(r.holder)?.owner ?? null : r.stored !== null ? game.entities.get(r.stored)?.owner ?? null : null;
@@ -62,6 +71,7 @@ export function createGame({ seed = 1, rules = null, size = 64 } = {}) {
     if (e.dead) return; e.hp -= amount;
     if (e.hp <= 0) {
       if (attacker) { const p = game.players[attacker.owner]; if (e.kind === 'building') p.bdestroyed++; else p.kills += e.cls === 'civ' ? 1 : 2; }
+      if (e.kind === 'unit') game.players[e.owner].losses++; // for generalship score (any death, attributed or not)
       game.remove(e);
     }
   };
@@ -128,4 +138,5 @@ function updateBuilding(game, b) {
   if (b.queue.length && --b.queue[0].remaining <= 0) {
     const q = b.queue.shift(), sp = game.findSpawn(b); game.spawnUnit(q.unit, b.owner, sp.x, sp.y);
   }
+  if (b.research && --b.research.remaining <= 0) { const t = b.research.tech; b.research = null; game.completeTech(b.owner, t); }
 }
