@@ -6,6 +6,7 @@ import { canAfford, ageUpProblem } from '../sim/commands.js';
 import { WONDER_TICKS, RELIC_TICKS } from '../rounds/index.js';
 import { icon } from './icons.js';
 import { COLORS, RES, costHtml, tipHtml } from './tips.js';
+import { QUALITY } from '../render/quality.js';
 
 const REASONS = { resources: 'Not enough resources', 'pop cap': 'Population cap reached - build Houses', age: 'Requires a later Age', placement: 'Cannot build there', 'needs buildings': 'Advancing needs 2 buildings of your current Age',
   'queue full': 'Production queue is full', 'no villagers': 'Select villagers first', 'no units': 'Select units first', 'bad target': 'Invalid target', 'already researching': 'Already advancing', 'needs town center': 'Requires a Town Center' };
@@ -61,6 +62,7 @@ export function createHud(ui) {
       + `<span class="res" title="Population">Pop ${p.pop}/${p.popCap}</span><span class="res">${p.ageUp ? 'Advancing... ' : ''}${ageName} Age</span>`
       + `<span class="grow"><b>${round ? round.name : 'Match'}</b> - <span class="obj">${obj}</span></span><span class="res">${fmtTime(g.time)}</span>`
       + [1, 2, 4].map(s => `<button data-speed="${s}" class="${ui.speed === s ? 'on' : ''}">${s}x</button>`).join('') + `<button data-pause="1" class="${ui.paused ? 'on' : ''}">${ui.paused ? 'Resume' : 'Pause'}</button><button data-resign="1" class="${ui.resignArmed ? 'on' : ''}">${ui.resignArmed ? 'Confirm resign?' : 'Resign'}</button>`;
+    if (!ui.touch) html += '<button data-menu="open" aria-label="Game settings">Settings</button>';
     if (ui.touch) {
       const objEl = $('objective'), otxt = round ? `${round.name}: ${obj}` : ''; if (objEl.textContent !== otxt) objEl.textContent = otxt;
       let idleN = 0; for (const u of g.units.values()) if (u.owner === 0 && u.type === 'villager' && u.order.type === 'idle') idleN++;
@@ -116,15 +118,34 @@ export function createHud(ui) {
     document.body.classList.toggle('has-cmds', cmds.children.length > 0);
   };
   hud.openMenu = () => {
-    const m = $('gamemenu'); if (m.classList.contains('hidden')) { ui._wasPaused = ui.paused; ui.paused = true; }
+    const m = $('gamemenu'), opening = m.classList.contains('hidden');
+    if (opening) { ui._menuFocus = document.activeElement; ui._wasPaused = ui.paused; ui.paused = true; }
     m.innerHTML = `<div class="card"><h2>Menu</h2><button class="btn" data-menu="close">Resume game</button><div class="row">${[1, 2, 4].map(s => `<button class="btn ${ui.speed === s ? 'on' : ''}" data-speed="${s}">${s}x</button>`).join('')}</div><button class="btn" data-resign="1">${ui.resignArmed ? 'Confirm resign?' : 'Resign'}</button><button class="btn" data-quit="1">${ui.quitArmed ? 'Confirm quit?' : 'Quit to menu'}</button></div>`;
+    const graphics = `<fieldset class="graphics"><legend>Graphics quality</legend><div class="quality-options">${Object.entries(QUALITY).map(([id, option]) => `<button class="btn ${ui.view?.quality === id ? 'on' : ''}" data-quality="${id}" aria-pressed="${ui.view?.quality === id}">${option.label}</button>`).join('')}</div><p>High adds richer lighting and grass. Ultra sharpens shadows and detail. Balanced uses less power.</p></fieldset>`;
+    m.querySelector('.card').insertAdjacentHTML('beforeend', graphics);
+    m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', 'Game settings');
     m.classList.remove('hidden');
+    if (opening) m.querySelector('[data-menu="close"]').focus();
   };
-  hud.closeMenu = () => { const m = $('gamemenu'); if (m.classList.contains('hidden')) return; m.classList.add('hidden'); ui.paused = !!ui._wasPaused; };
+  hud.closeMenu = () => {
+    const m = $('gamemenu'); if (m.classList.contains('hidden')) return;
+    m.classList.add('hidden'); ui.paused = !!ui._wasPaused;
+    (ui._menuFocus?.isConnected ? ui._menuFocus : top.querySelector('[data-menu="open"]'))?.focus();
+  };
+  $('gamemenu').addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Escape') { e.preventDefault(); hud.closeMenu(); }
+    if (e.key === 'Tab') {
+      const buttons = [...$('gamemenu').querySelectorAll('button')], first = buttons[0], last = buttons.at(-1);
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  });
   document.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b || b.classList.contains('off')) return;
     if (b.dataset.menu === 'open') return hud.openMenu();
     if (b.dataset.menu === 'close') return hud.closeMenu();
+    if (b.dataset.quality) { ui.view?.setQuality(b.dataset.quality); hud.openMenu(); $('gamemenu').querySelector(`[data-quality="${ui.view.quality}"]`)?.focus(); return; }
     if (b.dataset.act) return ui.actions?.[b.dataset.act]?.();
     if (b.dataset.quit) { if (ui.quitArmed) { ui.quitArmed = false; hud.closeMenu(); return ui.quit(); } ui.quitArmed = true; setTimeout(() => { ui.quitArmed = false; }, 3000); return hud.openMenu(); }
     if (b.dataset.speed) ui.setSpeed(+b.dataset.speed);
