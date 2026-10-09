@@ -1,44 +1,85 @@
 import * as THREE from 'three';
 import { BUILDINGS } from '../data/buildings.js';
-import { RES_KIND } from '../sim/util.js';
-import { buildModel, animate } from './models.js';
+import { buildModel, animate, TEAM } from './models.js';
+import { createTerrain } from './terrain.js';
+import { QUALITY, readQuality, saveQuality, validQuality, renderPixelRatio } from './quality.js';
+import { createSkyLighting, createLightingEffects } from './lighting.js';
 
-export const OWNER_COLOR = [0x3b82f6, 0xef4444];
-const geo = { box: new THREE.BoxGeometry(1, 1, 1), cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 12), cone: new THREE.ConeGeometry(0.5, 1, 4), cone8: new THREE.ConeGeometry(0.5, 1, 8), sph: new THREE.SphereGeometry(0.5, 12, 8), rock: new THREE.DodecahedronGeometry(0.5), ring: new THREE.RingGeometry(0.55, 0.7, 24), circle: new THREE.CircleGeometry(1, 20), plane: new THREE.PlaneGeometry(1, 1) };
-const matCache = new Map();
-const mat = (c, opts = {}) => { const k = c + JSON.stringify(opts); if (!matCache.has(k)) matCache.set(k, new THREE.MeshLambertMaterial({ color: c, ...opts })); return matCache.get(k); };
-function part(g, color, sx, sy, sz, x = 0, y = 0, z = 0, rx = 0) { const m = new THREE.Mesh(geo[g], mat(color)); m.scale.set(sx, sy, sz); m.position.set(x, y + sy / 2, z); m.rotation.x = rx; return m; }
+let sessionQuality = null;
+
+export const OWNER_COLOR = TEAM;
+const geo = { box: new THREE.BoxGeometry(1, 1, 1), ring: new THREE.RingGeometry(0.55, 0.7, 24), plane: new THREE.PlaneGeometry(1, 1) };
+for (const geometry of Object.values(geo)) geometry.userData.shared = true;
+
+// Cached model geometry/materials belong to the module; everything else to this view.
+function disposeObject(root) {
+  const geometries = new Set(), materials = new Set(), textures = new Set();
+  root.traverse(o => {
+    if (o.geometry && !o.geometry.userData.shared) geometries.add(o.geometry);
+    for (const material of o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []) {
+      if (!material.userData.shared) { materials.add(material); if (material.map) textures.add(material.map); }
+    }
+  });
+  textures.forEach(t => t.dispose()); materials.forEach(m => m.dispose()); geometries.forEach(g => g.dispose());
+}
 
 export function createView(container, game) {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  let storage; try { storage = window.localStorage; } catch { /* Storage is optional. */ }
+  let qualityName = sessionQuality ?? readQuality(location.search, storage), preset = QUALITY[qualityName];
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.info.autoReset = false;
+
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
   container.appendChild(renderer.domElement);
-  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x10140f);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x6b7a55, 0.95));
-  const sun = new THREE.DirectionalLight(0xfff2d0, 0.9); sun.position.set(-30, 60, 20); scene.add(sun);
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x20271b);
+  scene.add(new THREE.HemisphereLight(0xc9deeb, 0x776342, 1.55));
+  const skyLighting = renderer.extensions.has('EXT_color_buffer_float') ? createSkyLighting(renderer) : null;
+  scene.environment = skyLighting?.texture ?? null; scene.environmentIntensity = 0.4;
+  const sun = new THREE.DirectionalLight(0xffe5ba, 3.3), sunOffset = new THREE.Vector3(-22, 38, 16);
+  sun.castShadow = true; sun.shadow.mapSize.setScalar(Math.min(preset.shadows, renderer.capabilities.maxTextureSize));
+  sun.shadow.radius = 2.5; sun.shadow.intensity = 0.85;
+  sun.shadow.normalBias = 0.035; sun.shadow.bias = -0.00015;
+  sun.shadow.camera.near = 1; sun.shadow.camera.far = 150;
+  scene.add(sun, sun.target);
   const N = game.map.size;
-  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -500, 500);
-  const view = { renderer, scene, camera, zoom: 14, focus: new THREE.Vector3(N / 2, 0, N / 2), groups: new Map(), pickables: [], dom: renderer.domElement };
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 250);
+  const view = { renderer, scene, camera, quality: qualityName, zoom: 14, focus: new THREE.Vector3(N / 2, 0, N / 2), groups: new Map(), pickables: [], dom: renderer.domElement };
+  let effects = createLightingEffects(renderer, scene, camera, preset);
   const DIR = new THREE.Vector3(1, 1.05, 1).normalize();
   function placeCamera() {
     const w = renderer.domElement.clientWidth || 1, h = renderer.domElement.clientHeight || 1, a = w / h;
     const hh = a < 1 ? view.zoom * 1.2 / a : view.zoom; camera.left = -hh * a; camera.right = hh * a; camera.top = hh; camera.bottom = -hh; camera.updateProjectionMatrix();
     camera.position.copy(view.focus).addScaledVector(DIR, 120); camera.lookAt(view.focus); camera.updateMatrixWorld(true);
+    const extent = Math.min(N, Math.max(18, hh * Math.max(1, a) * 1.4)), shadowCamera = sun.shadow.camera;
+    shadowCamera.left = shadowCamera.bottom = -extent; shadowCamera.right = shadowCamera.top = extent;
+    shadowCamera.updateProjectionMatrix();
+    sun.target.position.copy(view.focus); sun.position.copy(view.focus).add(sunOffset);
   }
   view.refreshCamera = placeCamera; view.halfExtents = () => [camera.right, camera.top];
-  view.resize = () => { renderer.setSize(container.clientWidth, container.clientHeight, false); placeCamera(); };
+  view.resize = () => {
+    const w = Math.max(1, container.clientWidth), h = Math.max(1, container.clientHeight);
+    renderer.setPixelRatio(renderPixelRatio(w, h, window.devicePixelRatio, preset));
+    renderer.setSize(w, h, false); placeCamera(); effects.resize(w, h);
+  };
+  view.setQuality = name => {
+    if (!validQuality(name)) return;
+    sessionQuality = name; saveQuality(name, storage);
+    if (name === qualityName) return;
+    qualityName = name; preset = QUALITY[name]; view.quality = name;
+    effects.dispose(); effects = createLightingEffects(renderer, scene, camera, preset);
+    sun.shadow.map?.dispose(); sun.shadow.map = null;
+    sun.shadow.mapSize.setScalar(Math.min(preset.shadows, renderer.capabilities.maxTextureSize));
+    terrain.setQuality(preset); view.resize();
+  };
   view.pan = (dx, dz) => { view.focus.x = Math.max(0, Math.min(N, view.focus.x + dx)); view.focus.z = Math.max(0, Math.min(N, view.focus.z + dz)); };
   view.setZoom = z => { view.zoom = Math.max(6, Math.min(34, z)); };
   view.centerOn = (x, y) => { view.focus.set(x, 0, y); };
 
   // terrain
-  const tex = document.createElement('canvas'); tex.width = tex.height = N * 8; const tc = tex.getContext('2d');
-  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-    const water = game.map.tiles[y * N + x] === 1, h = ((x * 73856093) ^ (y * 19349663)) >>> 0, v = (h % 100) / 100;
-    tc.fillStyle = water ? `hsl(205 ${55 + v * 10}% ${34 + v * 6}%)` : `hsl(${92 + v * 12} ${38 + v * 8}% ${34 + v * 7}%)`; tc.fillRect(x * 8, y * 8, 8, 8);
-  }
-  const ground = new THREE.Mesh(geo.plane, new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(tex) }));
-  ground.rotation.x = -Math.PI / 2; ground.scale.set(N, N, 1); ground.position.set(N / 2, 0, N / 2); scene.add(ground);
+  const terrain = createTerrain(game, renderer, preset), ground = terrain.ground;
+  scene.add(ground, terrain.water, terrain.grass);
   const outer = new THREE.Mesh(geo.plane, new THREE.MeshBasicMaterial({ color: 0x1c2618 })); outer.rotation.x = -Math.PI / 2; outer.scale.set(N * 3, N * 3, 1); outer.position.set(N / 2, -0.05, N / 2); scene.add(outer);
   view.ground = ground;
 
@@ -58,14 +99,21 @@ export function createView(container, game) {
 
   // entity meshes
   const _wq = new THREE.Quaternion();
-  const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.24, depthWrite: false });
+  const shadowCanvas = document.createElement('canvas'); shadowCanvas.width = shadowCanvas.height = 64;
+  const shadowContext = shadowCanvas.getContext('2d'), gradient = shadowContext.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gradient.addColorStop(0, 'rgba(20,14,6,0.38)'); gradient.addColorStop(0.45, 'rgba(20,14,6,0.18)'); gradient.addColorStop(1, 'rgba(20,14,6,0)');
+  shadowContext.fillStyle = gradient; shadowContext.fillRect(0, 0, 64, 64);
+  const shadowTexture = new THREE.CanvasTexture(shadowCanvas);
+  const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTexture, transparent: true, depthWrite: false });
+  shadowMat.userData.shared = true;
   function makeMesh(e) {
     const g = new THREE.Group(); g.userData = { id: e.id, kind: e.kind, owner: e.owner, hp: e.hp };
-    const m = buildModel(e); g.add(m.root); g.userData.anim = m.anim;
-    const sh = new THREE.Mesh(geo.circle, shadowMat); sh.rotation.x = -Math.PI / 2; sh.position.y = 0.04; sh.scale.set(m.shadow * 1.2, m.shadow * 1.2, 1); sh.raycast = () => {}; g.add(sh);
+    const age = e.kind === 'building' ? game.players[e.owner].age : null;
+    const m = buildModel(e, age); g.add(m.root); g.userData.anim = m.anim; g.userData.age = age;
+    const sh = new THREE.Mesh(geo.plane, shadowMat); sh.rotation.x = -Math.PI / 2; sh.position.y = 0.04; sh.scale.set(m.shadow * 2.8, m.shadow * 2.8, 1); sh.raycast = () => {}; g.add(sh);
     if (e.kind === 'unit' || e.kind === 'building') {
-      const ring = new THREE.Mesh(geo.ring, new THREE.MeshBasicMaterial({ color: 0xfacc15, side: THREE.DoubleSide, depthTest: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05;
-      const r = e.kind === 'building' ? e.size * 0.75 : 1; ring.scale.set(r * 1.4, r * 1.4, 1); ring.visible = false; ring.renderOrder = 3; g.add(ring); g.userData.ring = ring;
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 48), new THREE.MeshBasicMaterial({ color: 0xf3df93, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05;
+      const r = e.kind === 'building' ? e.size * 0.68 : 0.48; ring.scale.set(r, r, 1); ring.visible = false; ring.renderOrder = 3; g.add(ring); g.userData.ring = ring;
       const bg = new THREE.Mesh(geo.plane, new THREE.MeshBasicMaterial({ color: 0x111111, depthTest: false })), fg = new THREE.Mesh(geo.plane, new THREE.MeshBasicMaterial({ color: 0x22c55e, depthTest: false }));
       bg.renderOrder = fg.renderOrder = 4; bg.scale.set(1, 0.14, 1); const bar = new THREE.Group(); bar.add(bg, fg); bar.visible = false; bar.position.y = e.kind === 'building' ? (e.gatherType ? 0.8 : e.type === 'house' ? 1.8 : 2.6) : 1.5; g.add(bar); g.userData.bar = { bar, fg };
     }
@@ -81,14 +129,18 @@ export function createView(container, game) {
     for (const e of list) {
       seen.add(e.id);
       let g = view.groups.get(e.id);
+      if (g && e.kind === 'building' && g.userData.age !== game.players[e.owner].age) {
+        scene.remove(g); disposeObject(g); view.groups.delete(e.id); view.pickables.splice(view.pickables.indexOf(g), 1); g = null;
+      }
       if (!g) { g = makeMesh(e); view.groups.set(e.id, g); scene.add(g); view.pickables.push(g); g.position.set(...worldPos(e)); }
       g.userData.entity = e;
     }
-    for (const [id, g] of view.groups) if (!seen.has(id) || !game.entities.has(id)) { scene.remove(g); view.groups.delete(id); const i = view.pickables.indexOf(g); if (i >= 0) view.pickables.splice(i, 1); }
+    for (const [id, g] of view.groups) if (!seen.has(id) || !game.entities.has(id)) { scene.remove(g); disposeObject(g); view.groups.delete(id); const i = view.pickables.indexOf(g); if (i >= 0) view.pickables.splice(i, 1); }
   };
   const worldPos = e => e.kind === 'building' ? [e.x + e.size / 2, 0, e.y + e.size / 2] : [e.x, e.kind === 'relic' ? (e.holder !== null ? 1.35 : 0.2) : 0, e.y];
   view.frame = (dt, t) => {
     placeCamera();
+    terrain.update(t, view.fogEnabled);
     const k = Math.min(1, dt * 16);
     for (const g of view.groups.values()) {
       const e = g.userData.entity; if (!e) continue;
@@ -109,7 +161,7 @@ export function createView(container, game) {
       if (ud.bar) { const show = view.selection.has(e.id) || e.hp < e.maxHp; ud.bar.bar.visible = show; if (show) { const f = Math.max(0.001, e.hp / e.maxHp); ud.bar.bar.parent.getWorldQuaternion(_wq).invert(); ud.bar.bar.quaternion.copy(_wq).multiply(camera.quaternion); ud.bar.fg.scale.set(f, 0.14, 1); ud.bar.fg.position.x = (f - 1) / 2; ud.bar.fg.position.z = 0.001; ud.bar.fg.material.color.setHex(f > 0.5 ? 0x22c55e : f > 0.25 ? 0xeab308 : 0xef4444); } }
     }
     fog.visible = view.fogEnabled;
-    renderer.render(scene, camera);
+    renderer.info.reset(); effects.render();
   };
   // placement ghost
   const ghost = new THREE.Mesh(geo.box, new THREE.MeshBasicMaterial({ color: 0x22c55e, transparent: true, opacity: 0.5, depthTest: false })); ghost.visible = false; ghost.renderOrder = 5; scene.add(ghost);
@@ -120,11 +172,11 @@ export function createView(container, game) {
   view.pickEntity = (cx, cy) => { setRay(cx, cy); const hits = ray.intersectObjects(view.pickables, true); for (const h of hits) { const id = h.object.userData.gid; if (id !== undefined && view.groups.get(id)) return view.groups.get(id).userData.entity; } return null; };
   view.pickGround = (cx, cy) => { setRay(cx, cy); const h = ray.intersectObject(ground)[0]; return h ? { x: h.point.x, y: h.point.z } : null; };
   view.project = (x, y) => { const v = new THREE.Vector3(x, 0.4, y).project(camera), r = renderer.domElement.getBoundingClientRect(); return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height }; };
-  view.dispose = () => { renderer.dispose(); renderer.domElement.remove(); };
+  view.dispose = () => { effects.dispose(); terrain.dispose(); skyLighting?.dispose(); disposeObject(scene); shadowMat.dispose(); shadowTexture.dispose(); sun.shadow.dispose(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); };
   const markers = [];
   view.marker = (x, y) => { const m = new THREE.Mesh(geo.ring, new THREE.MeshBasicMaterial({ color: 0x4ade80, transparent: true, side: THREE.DoubleSide, depthTest: false })); m.rotation.x = -Math.PI / 2; m.position.set(x, 0.12, y); m.renderOrder = 6; m.userData.age = 0; scene.add(m); markers.push(m); };
   const baseFrame = view.frame;
-  view.frame = (dt, t) => { for (let i = markers.length - 1; i >= 0; i--) { const m = markers[i]; m.userData.age += dt; m.scale.setScalar(0.6 + m.userData.age * 2); m.material.opacity = Math.max(0, 1 - m.userData.age * 2.2); if (m.userData.age > 0.45) { scene.remove(m); markers.splice(i, 1); } } baseFrame(dt, t); };
+  view.frame = (dt, t) => { for (let i = markers.length - 1; i >= 0; i--) { const m = markers[i]; m.userData.age += dt; m.scale.setScalar(0.6 + m.userData.age * 2); m.material.opacity = Math.max(0, 1 - m.userData.age * 2.2); if (m.userData.age > 0.45) { scene.remove(m); disposeObject(m); markers.splice(i, 1); } } baseFrame(dt, t); };
   view.resize();
   return view;
 }
