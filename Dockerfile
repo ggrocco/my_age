@@ -3,6 +3,18 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
+# Headless test image (sim, rounds, bot, bracket); not part of the default build.
+#   docker build --target test -t aoe-knockout-test . && docker run --rm aoe-knockout-test
+#   docker run --rm aoe-knockout-test node test/bot-sim.js 12
+FROM node:22-alpine AS test
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY src ./src
+COPY test ./test
+CMD ["node", "--test", "test/*.test.js"]
+
+# Keep the nginx stage last: it is the default target for `docker build .` and compose.
 FROM nginx:1.27-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 WORKDIR /usr/share/nginx/html
