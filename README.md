@@ -13,6 +13,27 @@ npm test                         # simulation, UI-data, and render-model tests
 node test/bot-sim.js 12          # bot-vs-bot termination check, 12 seeds x 5 rounds
 ```
 
+## Deploy (Docker)
+
+```
+docker compose up -d --build     # nginx image on http://localhost:8080/ (AOE_PORT=9000 to change)
+```
+
+The image is static files only (`index.html`, `styles.css`, `src/`, the two three.js folders the import map
+uses) behind nginx, with a healthcheck. Plain `docker build -t aoe-knockout .` builds the same image.
+
+## CI (Jenkins)
+
+`Jenkinsfile` runs the unit tests (JUnit report), `test/bot-sim.js 12`, then builds the nginx image and
+smoke-tests it (page, CSS, JS and both three.js import-map paths served with the right content type). Everything
+runs in Docker, so the agent needs only the docker CLI with a reachable daemon (e.g. Jenkins in a container with
+`/var/run/docker.sock` mounted and the docker CLI installed) and the JUnit plugin. Nothing is pushed or deployed.
+Same tests without Jenkins:
+
+```
+docker build --target test -t aoe-knockout-test . && docker run --rm aoe-knockout-test
+```
+
 URL parameters: `?round=1..5` (quick match), `&opp=easy|medium|hard`, `&seed=N`, `&speed=N`,
 `&autoplay=1` (a bot plays your side, `&bot=` sets its difficulty), `?autotour=1` (whole tournament on autopilot).
 `window.__app` exposes the live game for debugging.

@@ -14,6 +14,7 @@ node --test test/econ.test.js               # single test file
 node --test --test-name-pattern="<name>" test/*.test.js   # single test
 node test/bot-sim.js 12                     # bot-vs-bot termination check (12 seeds x 5 rounds)
 docker compose up -d --build                # nginx image, served on :8080
+docker build --target test -t aoe-knockout-test . && docker run --rm aoe-knockout-test   # tests in Docker
 ```
 
 Useful URL params: `?round=1..5&opp=easy|medium|hard&seed=N&speed=N`, `&autoplay=1` (bot plays your side), `?autotour=1` (whole tournament on autopilot), `?touch=1` (force phone layout). `window.__app` exposes the live game.
@@ -51,7 +52,9 @@ Shortcuts (URL params are listed under Commands; `window.__app.match.game` is th
 
 ## Deployment
 
-`Dockerfile` copies only `index.html`, `styles.css`, `src/` and the two three.js folders the import map references (`node_modules/three/build`, `.../examples/jsm`) into nginx. If `index.html`'s import map or static assets change, update the Dockerfile `COPY` lines.
+`Dockerfile` copies only `index.html`, `styles.css`, `src/` and the two three.js folders the import map references (`node_modules/three/build`, `.../examples/jsm`) into nginx. If `index.html`'s import map or static assets change, update the Dockerfile `COPY` lines, and the smoke-test paths in `Jenkinsfile`. The Dockerfile's `test` stage (node, runs `test/`) must stay before the nginx stage, which has to remain the last (default) target.
+
+`Jenkinsfile` builds the `test` target, runs the unit tests (JUnit to `reports/junit.xml`) and `bot-sim.js 12` in it, then builds the nginx image and smoke-tests it from inside the container. It only needs the docker CLI on the agent; it never pushes or deploys.
 
 ## Project docs
 
