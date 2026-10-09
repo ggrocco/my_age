@@ -9,7 +9,7 @@ Capture the Relics. Lose once and you're out.
 ```
 npm install
 npm start                       # node serve.js, then open http://localhost:8000/
-npm test                         # unit/integration tests (sim, rounds, bot, bracket)
+npm test                         # simulation, UI-data, and render-model tests
 node test/bot-sim.js 12          # bot-vs-bot termination check, 12 seeds x 5 rounds
 ```
 
@@ -37,6 +37,36 @@ docker build --target test -t aoe-knockout-test . && docker run --rm aoe-knockou
 URL parameters: `?round=1..5` (quick match), `&opp=easy|medium|hard`, `&seed=N`, `&speed=N`,
 `&autoplay=1` (a bot plays your side, `&bot=` sets its difficulty), `?autotour=1` (whole tournament on autopilot).
 `window.__app` exposes the live game for debugging.
+
+## Rendering
+
+The Three.js view uses warm directional lighting, filtered shadows, sky reflections, textured
+wood/stone/metal, wind-blown grass, and reflective water with animated normals and shoreline foam.
+High and Ultra add ambient occlusion for depth around buildings, foliage and units.
+Buildings use timber and detailed thatch in the Stone/Tool
+ages, with tiled roofs and masonry details from Bronze onward. Trees have irregular crowns and roots;
+units have articulated equipment, including separate drone, mech, and railgun models for AI Future.
+These are original procedural interpretations of an ancient RTS setting, not original Age of Empires assets.
+
+Choose **Settings → Graphics quality** on desktop, or open the top-right menu on a phone.
+Changes apply without restarting the match and are saved in this browser. The default is **High**;
+try High on an iPhone 17 Pro and Ultra on an M2 Max, then adjust for frame rate and battery use.
+These are starting recommendations, not measured performance guarantees on those devices.
+Use `&quality=balanced|high|ultra` to override the saved preference when opening a match.
+
+| Preset | Maximum pixel ratio / rendered pixels | Shadow map | Ambient occlusion | Grass clumps |
+| --- | --- | --- | --- | --- |
+| Balanced | 1.5 / 2 million | 1024 | Off | 2,500 |
+| High | 2 / 4 million | 2048 | Half resolution, 12 samples | 8,000 |
+| Ultra | 2.5 / 8 million | 4096 | Three-quarter resolution, 24 samples | 14,000 |
+
+No extra assets, network downloads, or build step are needed. Geometry is shared between models and
+grass is instanced. Decorative grass respects fog and building/resource footprints. Float render-target
+support is checked before enabling sky reflections and ambient occlusion; direct rendering remains available.
+`test/render-models.test.js` checks every unit and building age for valid geometry and animation transforms.
+`test/graphics-quality.test.js` covers preference handling, pixel budgets and the rendering fallback.
+Browser checks are still necessary for shaders, picking, lighting, and visual quality. Try
+`?round=1&seed=1` for the starting village and `?round=3&seed=1&touch=1` for the phone layout.
 
 ## Controls (phone / touch)
 

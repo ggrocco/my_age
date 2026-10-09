@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-# Headless test image (sim, rounds, bot, bracket); not part of the default build.
+# Headless test image (npm test's suite plus bot-sim); not part of the default build.
 #   docker build --target test -t aoe-knockout-test . && docker run --rm aoe-knockout-test
 #   docker run --rm aoe-knockout-test node test/bot-sim.js 12
 FROM node:22-alpine AS test

@@ -8,6 +8,17 @@ html, body { margin:0; height:100%; background:#0b0d09; overflow:hidden; font-fa
 #topbar .res { display:flex; align-items:center; gap:5px; font-variant-numeric: tabular-nums; min-width:64px; }
 #topbar .dot { width:12px; height:12px; border-radius:3px; display:inline-block; border:1px solid #0006; }
 #topbar .grow { flex:1; text-align:center; color:var(--bronze); letter-spacing:.04em; }
+#topbar .grow { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#topbar > button { flex-shrink:0; }
+@media (max-width:1200px) {
+  body:not(.touch) #topbar { gap:8px; padding:0 8px; font-size:13px; }
+  body:not(.touch) #topbar .res { min-width:0; white-space:nowrap; }
+  body:not(.touch) #topbar button { padding:4px 7px; }
+}
+@media (max-width:800px) {
+  body:not(.touch) #topbar { gap:4px; font-size:12px; }
+  body:not(.touch) #topbar .grow { display:none; }
+}
 #topbar .obj { color:#f5e6b8; }
 #topbar button, .btn { background:linear-gradient(#5a4327,#3a2a16); color:var(--parch); border:1px solid var(--bronze); border-radius:3px; padding:4px 10px; font:inherit; cursor:pointer; }
 #topbar button:hover, .btn:hover { background:linear-gradient(#7a5a33,#4a3620); }
@@ -128,6 +139,15 @@ body.touch #toast { bottom: calc(var(--sab) + 110px); font-size: 13px; max-width
 body.touch #gamemenu:not(.hidden) { display: flex; position: absolute; inset: 0; z-index: 12; background: #000b; align-items: center; justify-content: center; }
 body.touch #gamemenu .card { padding: 16px; max-width: 320px; } body.touch #gamemenu .btn { display: block; width: 100%; height: 48px; margin: 8px 0 0; font-size: 16px; } body.touch #gamemenu .row { display: flex; gap: 8px; } body.touch #gamemenu .row .btn { margin-top: 8px; }
 body.touch #gamemenu .btn.on { outline: 2px solid var(--ok); }
+#gamemenu:not(.hidden) { display:flex; position:absolute; inset:0; z-index:12; background:#000b; align-items:center; justify-content:center; }
+#gamemenu .card { max-width:420px; max-height:90dvh; overflow:auto; padding:20px; }
+#gamemenu .btn.on { outline:2px solid var(--ok); }
+#gamemenu .graphics { margin:18px 0 0; padding:12px 0 0; border:0; border-top:1px solid #c8a05266; }
+#gamemenu .graphics legend { padding:0 10px; color:var(--bronze); font-size:16px; }
+#gamemenu .quality-options { display:flex; gap:8px; }
+#gamemenu .quality-options .btn { flex:1; min-width:0; min-height:44px; margin:0; padding:8px 4px; font-size:14px; }
+#gamemenu .graphics p { font-size:12px; line-height:1.45; margin:12px 0 0; color:#c7b795; }
+body.touch #gamemenu .card { max-height:90dvh; }
 body.touch #topbar .grow, body.touch #topbar [data-speed], body.touch #topbar [data-pause], body.touch #topbar [data-resign] { display: none; }
 /* phone screens (menus, bracket, results) */
 body.touch #screen { align-items: flex-start; padding: calc(var(--sat) + 8px) calc(var(--sar) + 8px) calc(var(--sab) + 8px) calc(var(--sal) + 8px); }
